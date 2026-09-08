@@ -11953,6 +11953,10 @@
           "targetDescription": "Higher values increase contrast where possible. Background colors stay unchanged.",
           "subtle": "Subtle",
           "strong": "Strong"
+        },
+        "TerminalRenderingSection": {
+          "6d4c55bacc": "Inline Images",
+          "fffab5890b": "Render inline terminal images using SIXEL, iTerm2 (IIP), and Kitty graphics protocols. The decoder loads on demand and idle panes are unaffected."
         }
       },
       "right": {

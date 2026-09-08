@@ -1,0 +1,72 @@
+import type { ManagedPaneInternal } from './pane-manager-types'
+import {
+  getTerminalImageAddonConstructor,
+  primeTerminalImageAddon,
+  setTerminalImageAddonLoadHandlers
+} from './terminal-image-addon-loader'
+import { buildInlineImageAddonOptions } from './terminal-inline-image-options'
+
+// Panes whose setting is on but that opened before the lazy addon chunk
+// resolved. The loader's onLoaded handler drains them into a real attach.
+const panesAwaitingImageAddon = new Set<ManagedPaneInternal>()
+
+setTerminalImageAddonLoadHandlers({
+  onLoaded: () => {
+    // attachInlineImages removes the pane it handles from the set, so deleting
+    // the current iterator entry mid-iteration is safe.
+    for (const pane of panesAwaitingImageAddon) {
+      attachInlineImages(pane)
+    }
+  }
+})
+
+/** Load the inline-image addon into a pane, reusing the running terminal so the
+ *  feature can be enabled without dropping scrollback or the PTY binding.
+ *  Attaches after other addons (before PTY connect installs Orca's DA1 handler),
+ *  so Orca keeps DA1 authority; size-report double-answers are avoided by
+ *  disabling the addon's own reports. */
+export function attachInlineImages(pane: ManagedPaneInternal): void {
+  if (pane.imageAddon) {
+    return
+  }
+  const ImageAddonConstructor = getTerminalImageAddonConstructor()
+  if (!ImageAddonConstructor) {
+    // Chunk not resolved yet: latch and let the loader's onLoaded attach us.
+    pane.imageAttachmentDeferred = true
+    panesAwaitingImageAddon.add(pane)
+    void primeTerminalImageAddon()
+    return
+  }
+  panesAwaitingImageAddon.delete(pane)
+  pane.imageAttachmentDeferred = false
+  try {
+    const imageAddon = new ImageAddonConstructor(buildInlineImageAddonOptions())
+    pane.terminal.loadAddon(imageAddon)
+    pane.imageAddon = imageAddon
+  } catch (err) {
+    console.warn('[terminal] inline-image addon failed to attach for pane', pane.id, err)
+    pane.imageAddon = null
+  }
+}
+
+export function detachInlineImages(pane: ManagedPaneInternal): void {
+  panesAwaitingImageAddon.delete(pane)
+  pane.imageAttachmentDeferred = false
+  if (pane.imageAddon) {
+    try {
+      pane.imageAddon.dispose()
+    } catch {
+      /* ignore */
+    }
+    pane.imageAddon = null
+  }
+}
+
+/** Enable or disable inline images in-place on a running terminal. */
+export function setInlineImagesEnabled(pane: ManagedPaneInternal, enabled: boolean): void {
+  if (enabled) {
+    attachInlineImages(pane)
+  } else {
+    detachInlineImages(pane)
+  }
+}

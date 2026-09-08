@@ -19,6 +19,7 @@ import { attachWebgl, cancelPendingWebglRefresh, disposeWebgl } from './pane-web
 import { rebuildAttachedWebgl } from './pane-webgl-reattach'
 import { configureLazyArabicShapingJoiner } from './terminal-arabic-shaping-joiner'
 import { TerminalLigaturesAddon } from './terminal-ligatures-addon'
+import { attachInlineImages, detachInlineImages } from './pane-inline-images'
 import { installTerminalImeCandidateAnchor } from './terminal-ime-candidate-anchor'
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,11 @@ import { installTerminalImeCandidateAnchor } from './terminal-ime-candidate-anch
 export { createPaneDOM } from './pane-dom-creation'
 
 /** Open terminal into its container and load addons. Must be called after the container is in the DOM. */
-export function openTerminal(pane: ManagedPaneInternal, ligaturesEnabled = false): void {
+export function openTerminal(
+  pane: ManagedPaneInternal,
+  ligaturesEnabled = false,
+  inlineImagesEnabled = false
+): void {
   const {
     terminal,
     container,
@@ -103,6 +108,12 @@ export function openTerminal(pane: ManagedPaneInternal, ligaturesEnabled = false
   // Configure the first atlas with ligatures instead of immediately rebuilding it.
   if (ligaturesEnabled) {
     attachLigatures(pane)
+  }
+  // Attach before PTY connect installs Orca's DA1 handler so Orca keeps DA1
+  // authority; the addon's replies still flow through onData and are dropped
+  // during replay by forwardPtyInput, so no query leaks into the shell.
+  if (inlineImagesEnabled) {
+    attachInlineImages(pane)
   }
   if (pane.gpuRenderingEnabled) {
     attachWebgl(pane)
@@ -229,6 +240,9 @@ export function disposePane(
   } catch {
     /* ignore */
   }
+  // Detach removes the pane from the deferred-attach set and disposes the addon
+  // (canvas layers + parser handlers) before the terminal surface goes away.
+  detachInlineImages(pane)
   disposeWebgl(pane)
   try {
     pane.searchAddon.dispose()

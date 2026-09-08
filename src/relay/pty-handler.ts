@@ -19,6 +19,10 @@ import { inspectPtyChildProcesses, processHasChildren } from './pty-child-proces
 import { getRelayShellLaunchConfig, isRelayWslShell } from './pty-shell-launch'
 import { RetiredPaneSurfaceRegistry } from './retired-pane-surfaces'
 import { addWslEnvKeys } from '../shared/wsl-env'
+import {
+  ORCA_IMAGE_PROTOCOL_ENV,
+  ORCA_IMAGE_PROTOCOL_VALUE
+} from '../shared/terminal-image-protocol'
 import { SHELL_STARTUP_FEATURE_ENV } from '../main/shell-startup-features'
 import { DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS } from '../shared/ssh-types'
 import { shouldUseShellReadyStartupDelivery } from '../shared/codex-startup-delivery'
@@ -798,7 +802,8 @@ export class PtyHandler {
         TERM_PROGRAM: 'Orca',
         TERM_PROGRAM_VERSION:
           rendererEnv?.ORCA_APP_VERSION || process.env.ORCA_APP_VERSION || '0.0.0-dev',
-        FORCE_HYPERLINK: '1'
+        FORCE_HYPERLINK: '1',
+        [ORCA_IMAGE_PROTOCOL_ENV]: ORCA_IMAGE_PROTOCOL_VALUE
       },
       rendererEnv
     ) as Record<string, string>
@@ -1885,10 +1890,13 @@ export class PtyHandler {
       injectRelayFishHistoryEnv(spawnEnv, worktreeId)
     }
     const wslShell = isRelayWslShell(shell)
+    if (wslShell) {
+      // WSLENV is the only channel that carries a host env var into the guest.
+      addWslEnvKeys(spawnEnv, [ORCA_IMAGE_PROTOCOL_ENV])
+    }
     if (historyIsolationEnabled && worktreeId) {
       const historyRoot = injectRelayHistoryEnv(spawnEnv, worktreeId, shell, { wsl: wslShell })
       if (wslShell && historyRoot) {
-        // WSLENV is the only channel that carries a host env var into the guest.
         addWslEnvKeys(spawnEnv, ['HISTFILE'])
       }
     }
@@ -3023,6 +3031,9 @@ export class PtyHandler {
       basename(shell).toLowerCase().startsWith('fish')
     ) {
       injectRelayFishHistoryEnv(spawnEnv, entry.worktreeId)
+    }
+    if (wslShell) {
+      addWslEnvKeys(spawnEnv, [ORCA_IMAGE_PROTOCOL_ENV])
     }
     if (historyIsolationEnabled && entry.worktreeId) {
       const historyRoot = injectRelayHistoryEnv(spawnEnv, entry.worktreeId, shell, {

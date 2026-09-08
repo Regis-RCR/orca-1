@@ -192,6 +192,8 @@ export function installPtyInputRecovery(session: ConnectPanePtySession): void {
     // (#7329), so send immediately.
     sendInput: session.sendDesktopQueryReplyImmediate,
     isReplaying: () => isPaneReplaying(session.deps.replayingPanesRef, session.pane.id),
+    // Advertise Sixel in DA1 only while inline images are on, so tools that feature-detect emit it.
+    sixelSupported: () => useAppStore.getState().settings?.terminalInlineImages !== false,
     ...(session.isNativeWindowsConpty ? { da1Response: CONPTY_DA1_RESPONSE } : {})
   })
   session.respondToTerminalPixelSizeQueries = createTerminalPixelSizeQueryResponder(

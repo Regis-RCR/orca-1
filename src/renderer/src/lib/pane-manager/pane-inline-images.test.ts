@@ -1,0 +1,94 @@
+import { describe, expect, it, vi } from 'vitest'
+import { Terminal } from '@xterm/headless'
+
+vi.mock('@xterm/addon-image', () => ({
+  ImageAddon: class {
+    options: unknown
+    disposed = false
+    constructor(options?: unknown) {
+      this.options = options
+    }
+    activate(): void {}
+    dispose(): void {
+      this.disposed = true
+    }
+  }
+}))
+
+import type { ManagedPaneInternal } from './pane-manager-types'
+import {
+  getTerminalImageAddonConstructor,
+  primeTerminalImageAddon
+} from './terminal-image-addon-loader'
+import {
+  attachInlineImages,
+  detachInlineImages,
+  setInlineImagesEnabled
+} from './pane-inline-images'
+
+function makePane(id: number): ManagedPaneInternal {
+  const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true })
+  return {
+    id,
+    terminal,
+    imageAddon: null,
+    imageAttachmentDeferred: false
+  } as unknown as ManagedPaneInternal
+}
+
+describe('pane inline images', () => {
+  // Runs first: exercises the deferred path before the module-level addon memo loads.
+  it('attaches deferred panes once the addon chunk resolves', async () => {
+    const pane = makePane(1)
+    attachInlineImages(pane)
+
+    expect(pane.imageAddon).toBeNull()
+    expect(pane.imageAttachmentDeferred).toBe(true)
+
+    await primeTerminalImageAddon()
+
+    expect(getTerminalImageAddonConstructor()).not.toBeNull()
+    expect(pane.imageAddon).not.toBeNull()
+    expect(pane.imageAttachmentDeferred).toBe(false)
+  })
+
+  it('attaches synchronously once the addon is loaded', () => {
+    const pane = makePane(2)
+    attachInlineImages(pane)
+    expect(pane.imageAddon).not.toBeNull()
+  })
+
+  it('is idempotent — a second attach reuses the same addon', () => {
+    const pane = makePane(3)
+    attachInlineImages(pane)
+    const first = pane.imageAddon
+    attachInlineImages(pane)
+    expect(pane.imageAddon).toBe(first)
+  })
+
+  it('disposes the addon on detach', () => {
+    const pane = makePane(4)
+    attachInlineImages(pane)
+    const addon = pane.imageAddon as unknown as { disposed: boolean }
+    detachInlineImages(pane)
+    expect(pane.imageAddon).toBeNull()
+    expect(addon.disposed).toBe(true)
+  })
+
+  it('toggles attach and detach through setInlineImagesEnabled', () => {
+    const pane = makePane(5)
+    setInlineImagesEnabled(pane, true)
+    expect(pane.imageAddon).not.toBeNull()
+    setInlineImagesEnabled(pane, false)
+    expect(pane.imageAddon).toBeNull()
+  })
+
+  it('passes the perf-tuned options to the addon', () => {
+    const pane = makePane(6)
+    attachInlineImages(pane)
+    const options = (pane.imageAddon as unknown as { options: Record<string, unknown> }).options
+    expect(options.enableSizeReports).toBe(false)
+    expect(options.storageLimit).toBe(32)
+    expect(options.sixelSizeLimit).toBe(8 * 1024 * 1024)
+  })
+})

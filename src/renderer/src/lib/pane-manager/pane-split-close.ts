@@ -141,7 +141,11 @@ function openSplitPane(
   newPane: ManagedPaneInternal,
   cwd?: string
 ): void {
-  openTerminal(newPane, args.managerOptions.terminalLigaturesEnabled?.())
+  openTerminal(
+    newPane,
+    args.managerOptions.terminalLigaturesEnabled?.(),
+    args.managerOptions.terminalInlineImagesEnabled?.()
+  )
   applyPaneOpacity(args.panes.values(), newPane.id, args.styleOptions)
   applyDividerStyles(args.root, args.styleOptions)
   newPane.terminal.focus()

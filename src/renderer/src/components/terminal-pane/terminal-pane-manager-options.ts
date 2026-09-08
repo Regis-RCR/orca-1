@@ -109,6 +109,7 @@ export function createTerminalPaneManagerOptions(
         settingsRef.current?.terminalLigatures,
         settingsRef.current?.terminalFontFamily
       ),
+    terminalInlineImagesEnabled: () => settingsRef.current?.terminalInlineImages ?? true,
     terminalOptions: () => {
       const currentSettings = settingsRef.current
       const terminalFontWeights = resolveTerminalFontWeights(
