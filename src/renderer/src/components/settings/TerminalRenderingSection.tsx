@@ -8,6 +8,7 @@ import {
 import { SearchableSetting } from './SearchableSetting'
 import { TerminalContrastSetting } from './TerminalContrastSetting'
 import { translate } from '@/i18n/i18n'
+import { resolveTerminalInlineImagesEnabled } from '../../../../shared/terminal-inline-images-settings'
 
 type TerminalRenderingSectionProps = {
   settings: GlobalSettings
@@ -128,9 +129,13 @@ export function TerminalRenderingSection({
               'auto.components.settings.TerminalRenderingSection.fffab5890b',
               'Display images directly in the terminal using SIXEL, iTerm2 (IIP), and Kitty graphics protocols.'
             )}
-            checked={settings.terminalInlineImages !== false}
+            checked={resolveTerminalInlineImagesEnabled(settings.terminalInlineImages)}
             onChange={() =>
-              updateSettings({ terminalInlineImages: settings.terminalInlineImages === false })
+              updateSettings({
+                terminalInlineImages: !resolveTerminalInlineImagesEnabled(
+                  settings.terminalInlineImages
+                )
+              })
             }
           />
         </SearchableSetting>

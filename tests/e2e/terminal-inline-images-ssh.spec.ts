@@ -85,6 +85,9 @@ test('inline images stay bounded and recover through SSH drop and stall', async 
     if (!beforeZoom) {
       throw new Error('Image addon missing before zoom')
     }
+    // Without live images on both sides the equality below would hold at 0 === 0.
+    expect(beforeZoom.images).toBeGreaterThan(0)
+    expect(beforeZoom.storageMB).toBeGreaterThan(0)
     await orcaPage.evaluate(async () => {
       await window.__store!.getState().updateSettings({ terminalFontSize: 28 })
     })
@@ -102,6 +105,7 @@ test('inline images stay bounded and recover through SSH drop and stall', async 
     if (!afterZoom) {
       throw new Error('Image addon missing after zoom')
     }
+    expect(afterZoom.images).toBe(beforeZoom.images)
     expect(afterZoom.storageMB).toBe(beforeZoom.storageMB)
     await testInfo.attach('image-memory-counts', {
       body: JSON.stringify(flooded),

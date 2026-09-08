@@ -9,7 +9,7 @@ describe('inline image DA1 ownership', () => {
       vi.resetModules()
       const { installTerminalCapabilityReplyHandlers } =
         await import('./terminal-capability-replies')
-      const { attachInlineImages, detachInlineImages } =
+      const { attachInlineImages, detachInlineImages, terminalRendersInlineImages } =
         await import('../../lib/pane-manager/pane-inline-images')
       const { primeTerminalImageAddon } =
         await import('../../lib/pane-manager/terminal-image-addon-loader')
@@ -35,7 +35,9 @@ describe('inline image DA1 ownership', () => {
           replies.push(data)
         },
         isReplaying: () => replaying,
-        sixelSupported: () => enabled
+        // Mirrors pty-input-recovery: the setting alone is not enough, the decoder
+        // has to be attached before DA1 may claim Sixel.
+        sixelSupported: () => enabled && terminalRendersInlineImages(terminal)
       })
       try {
         if (loading === 'deferred') {
@@ -52,10 +54,16 @@ describe('inline image DA1 ownership', () => {
         expect(replies).toEqual([])
         replaying = false
         enabled = false
-        detachInlineImages(pane)
         await query()
         expect(replies.splice(0)).toEqual(['\x1b[?1;2c'])
         enabled = true
+        await query()
+        expect(replies.splice(0)).toEqual(['\x1b[?1;2;4c'])
+        // Setting still on, decoder gone: DA1 must stop claiming Sixel, or a
+        // feature-detecting tool emits DCS that nothing can render.
+        detachInlineImages(pane)
+        await query()
+        expect(replies.splice(0)).toEqual(['\x1b[?1;2c'])
         attachInlineImages(pane)
         await query()
         expect(replies.splice(0)).toEqual(['\x1b[?1;2;4c'])

@@ -1,10 +1,14 @@
-import type { IDisposable } from '@xterm/xterm'
+import type { IDisposable, Terminal } from '@xterm/xterm'
 
-const owners = new WeakMap<object, { refresh: () => void }>()
+// Structural so the capability-reply installer keeps its narrow Pick, but narrow
+// enough that a non-terminal wrapper cannot become a second, never-refreshed key.
+type Da1OwnerTerminal = Pick<Terminal, 'cols' | 'rows' | 'element' | 'options'>
+
+const owners = new WeakMap<Da1OwnerTerminal, { refresh: () => void }>()
 
 /** Keep Orca's replay-aware DA1 responder after subsequently attached addons. */
 export function registerTerminalDa1Owner(
-  terminal: object,
+  terminal: Da1OwnerTerminal,
   register: () => IDisposable
 ): IDisposable {
   let handler = register()
@@ -25,6 +29,6 @@ export function registerTerminalDa1Owner(
   }
 }
 
-export function refreshTerminalDa1Owner(terminal: object): void {
+export function refreshTerminalDa1Owner(terminal: Da1OwnerTerminal): void {
   owners.get(terminal)?.refresh()
 }

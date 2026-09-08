@@ -1,4 +1,5 @@
 import type { ImageAddon } from '@xterm/addon-image'
+import type { Terminal } from '@xterm/xterm'
 import { refreshTerminalDa1Owner } from './terminal-da1-ownership'
 import type { ManagedPaneInternal } from './pane-manager-types'
 import {
@@ -12,12 +13,28 @@ import { buildInlineImageAddonOptions } from './terminal-inline-image-options'
 // resolved. The loader's onLoaded handler drains them into a real attach.
 const panesAwaitingImageAddon = new Set<ManagedPaneInternal>()
 
+// Keyed on the terminal, not the pane: PTY connections hold a toPublicPane()
+// wrapper, which does not carry imageAddon.
+const terminalsRenderingInlineImages = new WeakSet<Terminal>()
+
+/** True only once the addon is really attached — not while its chunk loads or after it fails. */
+export function terminalRendersInlineImages(terminal: Terminal): boolean {
+  return terminalsRenderingInlineImages.has(terminal)
+}
+
 setTerminalImageAddonLoadHandlers({
   onLoaded: () => {
     // attachInlineImages removes the pane it handles from the set, so deleting
     // the current iterator entry mid-iteration is safe.
     for (const pane of panesAwaitingImageAddon) {
-      attachInlineImages(pane)
+      try {
+        attachInlineImages(pane)
+      } catch (err) {
+        // Why per-pane: this runs inside the loader promise, so one bad pane
+        // must not strand the rest of the drain or raise an unhandled rejection.
+        panesAwaitingImageAddon.delete(pane)
+        console.warn('[terminal] deferred inline-image attach failed for pane', pane.id, err)
+      }
     }
   }
 })
@@ -42,6 +59,7 @@ export function attachInlineImages(pane: ManagedPaneInternal): void {
     imageAddon = new ImageAddonConstructor(buildInlineImageAddonOptions())
     pane.terminal.loadAddon(imageAddon)
     pane.imageAddon = imageAddon
+    terminalsRenderingInlineImages.add(pane.terminal)
   } catch (err) {
     console.warn('[terminal] inline-image addon failed to attach for pane', pane.id, err)
     try {
@@ -49,6 +67,7 @@ export function attachInlineImages(pane: ManagedPaneInternal): void {
     } catch {
       /* Activation may have failed before addon disposal was fully initialized. */
     }
+    terminalsRenderingInlineImages.delete(pane.terminal)
     pane.imageAddon = null
   } finally {
     refreshTerminalDa1Owner(pane.terminal)
@@ -58,6 +77,7 @@ export function attachInlineImages(pane: ManagedPaneInternal): void {
 export function detachInlineImages(pane: ManagedPaneInternal): void {
   panesAwaitingImageAddon.delete(pane)
   pane.imageAttachmentDeferred = false
+  terminalsRenderingInlineImages.delete(pane.terminal)
   if (pane.imageAddon) {
     try {
       pane.imageAddon.dispose()

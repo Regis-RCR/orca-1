@@ -33,7 +33,8 @@ import {
 import {
   attachInlineImages,
   detachInlineImages,
-  setInlineImagesEnabled
+  setInlineImagesEnabled,
+  terminalRendersInlineImages
 } from './pane-inline-images'
 
 function makePane(id: number): ManagedPaneInternal {
@@ -107,6 +108,29 @@ describe('pane inline images', () => {
     attachInlineImages(pane)
     expect(pane.imageAddon).not.toBeNull()
     detachInlineImages(pane)
+    pane.terminal.dispose()
+  })
+
+  it('reports inline-image rendering only while the addon is really attached', () => {
+    const pane = makePane(8)
+    expect(terminalRendersInlineImages(pane.terminal)).toBe(false)
+    attachInlineImages(pane)
+    expect(terminalRendersInlineImages(pane.terminal)).toBe(true)
+    detachInlineImages(pane)
+    expect(terminalRendersInlineImages(pane.terminal)).toBe(false)
+    pane.terminal.dispose()
+  })
+
+  it('does not report rendering for a pane whose addon failed to activate', () => {
+    const pane = makePane(9)
+    activation.fail = true
+    try {
+      attachInlineImages(pane)
+    } finally {
+      activation.fail = false
+    }
+    expect(pane.imageAddon).toBeNull()
+    expect(terminalRendersInlineImages(pane.terminal)).toBe(false)
     pane.terminal.dispose()
   })
 

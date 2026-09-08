@@ -12,6 +12,7 @@ import {
   assertInlineImagePixels,
   enableInlineImages,
   inlineImageProducer,
+  readInlineImageResources,
   readInlineImageState
 } from './helpers/terminal-inline-image-proof'
 import { nodeTerminalCommand } from './terminal-node-command'
@@ -20,50 +21,6 @@ const TAB_COUNT = 12
 const CYCLES = 2
 
 test.use({ orcaAppExtraArgs: ['--enable-precise-memory-info'] })
-
-async function imageResources(page: Page, tabIds: string[]) {
-  return page.evaluate((ids) => {
-    type Addon = {
-      _storage?: { _images: Map<number, unknown> }
-      _handlers?: Map<
-        string,
-        {
-          _pendingTransmissions?: Map<number, { decoder: { _mem: { buffer: ArrayBuffer } } }>
-          _kittyStorage?: { images: Map<number, { data: Blob }> }
-        }
-      >
-      storageUsage?: number
-    }
-    return ids.map((id) => {
-      const manager = window.__paneManagers?.get(id)
-      const terminal = manager?.getActivePane()?.terminal
-      const internals = terminal as unknown as
-        | { _addonManager: { _addons: { instance: Addon }[] } }
-        | undefined
-      const addon = internals?._addonManager._addons
-        .map((entry) => entry.instance)
-        .find((entry) => entry._handlers?.has('kitty'))
-      const kitty = addon?._handlers?.get('kitty')
-      const pending = [...(kitty?._pendingTransmissions?.values() ?? [])]
-      return {
-        id,
-        mounted: Boolean(manager),
-        addon: Boolean(addon),
-        images: addon?._storage?._images.size ?? 0,
-        storageMB: addon?.storageUsage ?? 0,
-        pending: pending.length,
-        decoderBytes: pending.reduce(
-          (sum, upload) => sum + upload.decoder._mem.buffer.byteLength,
-          0
-        ),
-        blobBytes: [...(kitty?._kittyStorage?.images.values() ?? [])].reduce(
-          (sum, image) => sum + image.data.size,
-          0
-        )
-      }
-    })
-  }, tabIds)
-}
 
 async function activateTab(page: Page, tabId: string): Promise<void> {
   await page.evaluate((id) => window.__store!.getState().setActiveTab(id), tabId)
@@ -133,7 +90,7 @@ test('twelve image terminals release decoder and image storage across reset and 
           await assertInlineImagePixels(orcaPage, testInfo.outputPath(`cycle-${cycle}-images.png`))
         }
       }
-      const loaded = await imageResources(
+      const loaded = await readInlineImageResources(
         orcaPage,
         tabs.map((tab) => tab.id)
       )
@@ -162,7 +119,7 @@ test('twelve image terminals release decoder and image storage across reset and 
         await waitForTerminalOutput(orcaPage, 'RESET_DONE', 30_000)
         await expect
           .poll(async () => {
-            const [resource] = await imageResources(orcaPage, [tab.id])
+            const [resource] = await readInlineImageResources(orcaPage, [tab.id])
             return {
               images: resource.images,
               pending: resource.pending,
@@ -174,7 +131,7 @@ test('twelve image terminals release decoder and image storage across reset and 
       }
       samples.push({
         stage: `cycle-${cycle}-reset`,
-        resources: await imageResources(
+        resources: await readInlineImageResources(
           orcaPage,
           tabs.map((tab) => tab.id)
         ),
@@ -188,7 +145,7 @@ test('twelve image terminals release decoder and image storage across reset and 
         .poll(
           async () =>
             (
-              await imageResources(
+              await readInlineImageResources(
                 orcaPage,
                 tabs.map((tab) => tab.id)
               )
@@ -203,11 +160,13 @@ test('twelve image terminals release decoder and image storage across reset and 
       samples.push({ stage: `cycle-${cycle}-closed`, heap: closed })
       // GC heap/backing storage catch retained owners without requiring allocator RSS to fall.
       expect(closed.usedSize).toBeLessThanOrEqual(baseline.usedSize + 64_000_000)
-      if (baseline.backingStorageSize !== undefined && closed.backingStorageSize !== undefined) {
-        expect(closed.backingStorageSize).toBeLessThanOrEqual(
-          baseline.backingStorageSize + 32_000_000
-        )
-      }
+      // Assert presence rather than guarding on it: a CDP field that stops being
+      // reported would otherwise delete this leak check and still pass.
+      expect(baseline.backingStorageSize).toBeDefined()
+      expect(closed.backingStorageSize).toBeDefined()
+      expect(closed.backingStorageSize!).toBeLessThanOrEqual(
+        baseline.backingStorageSize! + 32_000_000
+      )
     }
   } finally {
     for (const id of outstandingTabs) {

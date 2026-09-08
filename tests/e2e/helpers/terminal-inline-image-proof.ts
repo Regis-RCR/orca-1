@@ -32,41 +32,78 @@ export async function enableInlineImages(page: Page): Promise<void> {
   await expect.poll(() => readInlineImageState(page), { timeout: 30_000 }).not.toBeNull()
 }
 
-export async function readInlineImageState(page: Page) {
-  return page.evaluate(() => {
-    const state = window.__store!.getState()
-    const manager = window.__paneManagers?.get(state.activeTabId!)
-    const terminal = manager?.getActivePane()?.terminal
-    type ImageInternals = {
-      _addonManager: {
-        _addons: {
-          instance: {
-            _storage?: { _images: Map<number, unknown> }
-            _handlers?: Map<
-              string,
-              {
-                _pendingTransmissions?: Map<number, { decoder: { _mem: { buffer: ArrayBuffer } } }>
-              }
-            >
-            storageUsage?: number
-          }
-        }[]
+export type InlineImageResources = {
+  id: string
+  mounted: boolean
+  addon: boolean
+  images: number
+  storageMB: number
+  pending: number
+  decoderBytes: number
+  blobBytes: number
+}
+
+/** One walk of the addon's private state, shared by every image spec so the
+ *  internals contract against the patched dependency has a single definition. */
+export async function readInlineImageResources(
+  page: Page,
+  tabIds: string[]
+): Promise<InlineImageResources[]> {
+  return page.evaluate((ids) => {
+    type Addon = {
+      _storage?: { _images: Map<number, unknown> }
+      _handlers?: Map<
+        string,
+        {
+          _pendingTransmissions?: Map<number, { decoder: { _mem: { buffer: ArrayBuffer } } }>
+          _kittyStorage?: { images: Map<number, { data: Blob }> }
+        }
+      >
+      storageUsage?: number
+    }
+    return ids.map((id) => {
+      const manager = window.__paneManagers?.get(id)
+      const terminal = manager?.getActivePane()?.terminal
+      const internals = terminal as unknown as
+        | { _addonManager: { _addons: { instance: Addon }[] } }
+        | undefined
+      const addon = internals?._addonManager._addons
+        .map((entry) => entry.instance)
+        .find((entry) => entry._handlers?.has('kitty'))
+      const kitty = addon?._handlers?.get('kitty')
+      const pending = [...(kitty?._pendingTransmissions?.values() ?? [])]
+      return {
+        id,
+        mounted: Boolean(manager),
+        addon: Boolean(addon),
+        images: addon?._storage?._images.size ?? 0,
+        storageMB: addon?.storageUsage ?? 0,
+        pending: pending.length,
+        decoderBytes: pending.reduce(
+          (sum, upload) => sum + upload.decoder._mem.buffer.byteLength,
+          0
+        ),
+        blobBytes: [...(kitty?._kittyStorage?.images.values() ?? [])].reduce(
+          (sum, image) => sum + image.data.size,
+          0
+        )
       }
-    }
-    const addon = (terminal as unknown as ImageInternals | undefined)?._addonManager._addons
-      .map((entry) => entry.instance)
-      .find((entry) => entry._handlers?.has('kitty'))
-    if (!addon) {
-      return null
-    }
-    const pending = [...(addon._handlers?.get('kitty')?._pendingTransmissions?.values() ?? [])]
-    return {
-      images: addon._storage?._images.size ?? 0,
-      storageMB: addon.storageUsage ?? 0,
-      pending: pending.length,
-      decoderBytes: pending.reduce((sum, upload) => sum + upload.decoder._mem.buffer.byteLength, 0)
-    }
-  })
+    })
+  }, tabIds)
+}
+
+/** Active pane only; null when no image addon is attached. */
+export async function readInlineImageState(page: Page) {
+  const activeTabId = await page.evaluate(() => window.__store!.getState().activeTabId)
+  if (!activeTabId) {
+    return null
+  }
+  const [resources] = await readInlineImageResources(page, [activeTabId])
+  if (!resources?.addon) {
+    return null
+  }
+  const { images, storageMB, pending, decoderBytes, blobBytes } = resources
+  return { images, storageMB, pending, decoderBytes, blobBytes }
 }
 
 export async function assertInlineImagePixels(page: Page, screenshotPath: string): Promise<void> {
