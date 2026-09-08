@@ -24,11 +24,17 @@ truth. Everything else is derived from it by
 `config/scripts/regenerate-xterm-patches.mjs`, which is pinned to the exact
 upstream commit the published tarball was built from.
 
-`@xterm/addon-webgl`, `@xterm/addon-search` and `@xterm/addon-serialize` are
+`@xterm/addon-webgl`, `@xterm/addon-search`, `@xterm/addon-serialize` and `@xterm/addon-image` are
 generated the same way, from their own source patches under
 `config/patches/xterm-src/`. Their entries differ only in `packageDir` and build
-steps; everything below applies to all four. `@xterm/addon-ligatures` is the one
+steps; everything below applies to all five. `@xterm/addon-ligatures` is the one
 patch still written by hand — see [Known Gaps](#known-gaps).
+
+The image patch bounds pending Kitty decoders by their maximum WASM capacity
+and caps transmitted image blobs by byte size. Both use the configured storage
+budget; upstream's displayed-pixel budget does not cover these allocations.
+`config/scripts/xterm-image-memory-contract.test.mjs` exercises the installed
+bundle with unfinished uploads, chunk continuation, FIFO eviction and disposal.
 
 ## Rules
 

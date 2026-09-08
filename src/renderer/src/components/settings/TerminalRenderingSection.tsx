@@ -103,7 +103,7 @@ export function TerminalRenderingSection({
           )}
           description={translate(
             'auto.components.settings.TerminalRenderingSection.fffab5890b',
-            'Render inline terminal images using SIXEL, iTerm2 (IIP), and Kitty graphics protocols. The decoder loads on demand and idle panes are unaffected.'
+            'Display images directly in the terminal using SIXEL, iTerm2 (IIP), and Kitty graphics protocols.'
           )}
           keywords={[
             'terminal',
@@ -126,7 +126,7 @@ export function TerminalRenderingSection({
             )}
             description={translate(
               'auto.components.settings.TerminalRenderingSection.fffab5890b',
-              'Render inline terminal images using SIXEL, iTerm2 (IIP), and Kitty graphics protocols. The decoder loads on demand and idle panes are unaffected.'
+              'Display images directly in the terminal using SIXEL, iTerm2 (IIP), and Kitty graphics protocols.'
             )}
             checked={settings.terminalInlineImages !== false}
             onChange={() =>
