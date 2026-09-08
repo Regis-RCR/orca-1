@@ -144,5 +144,9 @@ describe('pane inline images', () => {
       Number(options.storageLimit) * 1000000
     )
     expect(options.sixelSizeLimit).toBe(8 * 1024 * 1024)
+    expect(options.iipSizeLimit).toBe(8 * 1024 * 1024)
+    expect(options.kittySizeLimit).toBe(8 * 1024 * 1024)
+    // Pin the value, not the formula the source already states.
+    expect(options.pixelLimit).toBe(8_000_000)
   })
 })

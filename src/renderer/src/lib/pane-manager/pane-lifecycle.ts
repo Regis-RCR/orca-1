@@ -31,8 +31,8 @@ export { createPaneDOM } from './pane-dom-creation'
 /** Open terminal into its container and load addons. Must be called after the container is in the DOM. */
 export function openTerminal(
   pane: ManagedPaneInternal,
-  ligaturesEnabled = false,
-  inlineImagesEnabled = false
+  // Named rather than positional: two adjacent optional booleans swap silently.
+  { ligatures = false, inlineImages = false }: { ligatures?: boolean; inlineImages?: boolean } = {}
 ): void {
   const {
     terminal,
@@ -106,11 +106,11 @@ export function openTerminal(
   pane.focusClassSyncCleanup = attachDomRendererFocusClassSync(terminal.element)
 
   // Configure the first atlas with ligatures instead of immediately rebuilding it.
-  if (ligaturesEnabled) {
+  if (ligatures) {
     attachLigatures(pane)
   }
   // Deferred attachment restores Orca's DA1 handler after the addon registers its own.
-  if (inlineImagesEnabled) {
+  if (inlineImages) {
     attachInlineImages(pane)
   }
   if (pane.gpuRenderingEnabled) {
