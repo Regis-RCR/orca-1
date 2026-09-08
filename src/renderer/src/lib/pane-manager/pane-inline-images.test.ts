@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { Terminal } from '@xterm/headless'
 
 const { activation, disposeSpy } = vi.hoisted(() => ({
@@ -26,10 +26,7 @@ vi.mock('@xterm/addon-image', () => ({
 }))
 
 import type { ManagedPaneInternal } from './pane-manager-types'
-import {
-  getTerminalImageAddonConstructor,
-  primeTerminalImageAddon
-} from './terminal-image-addon-loader'
+import { primeTerminalImageAddon } from './terminal-image-addon-loader'
 import {
   attachInlineImages,
   detachInlineImages,
@@ -48,19 +45,31 @@ function makePane(id: number): ManagedPaneInternal {
 }
 
 describe('pane inline images', () => {
-  // Runs first: exercises the deferred path before the module-level addon memo loads.
+  // Every test below the deferred one wants the addon already resolved, so the
+  // file has no ordering requirement in either direction.
+  beforeAll(async () => {
+    await primeTerminalImageAddon()
+  })
+
   it('attaches deferred panes once the addon chunk resolves', async () => {
+    // Fresh modules rather than "must run first": the deferred path only exists
+    // while the module-level addon memo is still unresolved.
+    vi.resetModules()
+    const images = await import('./pane-inline-images')
+    const loader = await import('./terminal-image-addon-loader')
     const pane = makePane(1)
-    attachInlineImages(pane)
+    images.attachInlineImages(pane)
 
     expect(pane.imageAddon).toBeNull()
     expect(pane.imageAttachmentDeferred).toBe(true)
 
-    await primeTerminalImageAddon()
+    await loader.primeTerminalImageAddon()
 
-    expect(getTerminalImageAddonConstructor()).not.toBeNull()
+    expect(loader.getTerminalImageAddonConstructor()).not.toBeNull()
     expect(pane.imageAddon).not.toBeNull()
     expect(pane.imageAttachmentDeferred).toBe(false)
+    images.detachInlineImages(pane)
+    pane.terminal.dispose()
   })
 
   it('attaches synchronously once the addon is loaded', () => {
