@@ -20,11 +20,7 @@ setTerminalImageAddonLoadHandlers({
   }
 })
 
-/** Load the inline-image addon into a pane, reusing the running terminal so the
- *  feature can be enabled without dropping scrollback or the PTY binding.
- *  Attaches after other addons (before PTY connect installs Orca's DA1 handler),
- *  so Orca keeps DA1 authority; size-report double-answers are avoided by
- *  disabling the addon's own reports. */
+/** Attach in place so enabling images preserves scrollback and the PTY binding. */
 export function attachInlineImages(pane: ManagedPaneInternal): void {
   if (pane.imageAddon) {
     return

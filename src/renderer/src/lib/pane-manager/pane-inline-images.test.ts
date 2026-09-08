@@ -89,6 +89,9 @@ describe('pane inline images', () => {
     const options = (pane.imageAddon as unknown as { options: Record<string, unknown> }).options
     expect(options.enableSizeReports).toBe(false)
     expect(options.storageLimit).toBe(32)
+    expect(Number(options.pixelLimit) * 4).toBeLessThanOrEqual(
+      Number(options.storageLimit) * 1000000
+    )
     expect(options.sixelSizeLimit).toBe(8 * 1024 * 1024)
   })
 })

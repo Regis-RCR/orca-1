@@ -35,6 +35,12 @@ and caps transmitted image blobs by byte size. Both use the configured storage
 budget; upstream's displayed-pixel budget does not cover these allocations.
 `config/scripts/xterm-image-memory-contract.test.mjs` exercises the installed
 bundle with unfinished uploads, chunk continuation, FIFO eviction and disposal.
+The patch also bounds decompression before joining decoded chunks, validates PNG
+dimensions before native decoding, and closes stale asynchronous image results
+after reset, disable or disposal. `config/scripts/xterm-image-lifecycle-contract.test.mjs`
+exercises those boundaries against the installed addon. Font zoom scales visible
+tiles without creating enlarged full-image canvases;
+`config/scripts/xterm-image-resize-contract.test.mjs` checks allocation and tile mapping.
 
 ## Rules
 

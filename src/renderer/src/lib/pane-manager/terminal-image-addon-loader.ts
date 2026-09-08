@@ -3,9 +3,7 @@ import type { ImageAddon, IImageAddonOptions } from '@xterm/addon-image'
 // Why deferred: @xterm/addon-image ships the SIXEL/QOI/base64 wasm decoders
 // inlined as base64 plus the protocol handlers — a chunk no idle terminal needs.
 // Panes only ever construct it once a terminal attaches with inline images
-// enabled, so the load stays eager-but-off-critical-path exactly like the WebGL
-// addon: primed after first paint (only when the setting is on) and read back
-// synchronously at attach time.
+// enabled. Later panes reuse the loaded constructor synchronously.
 type ImageAddonConstructor = new (options?: IImageAddonOptions) => ImageAddon
 
 let imageAddonConstructor: ImageAddonConstructor | null = null
