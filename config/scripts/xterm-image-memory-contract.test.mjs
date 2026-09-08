@@ -79,4 +79,34 @@ describe('xterm image memory contract', () => {
       terminal.dispose()
     }
   })
+
+  it('evicts unplaced payloads before displayed ones', async () => {
+    const { terminal, handler } = createTerminal({ storageLimit: 0.5 })
+    const storage = handler._kittyStorage
+    const payload = Buffer.alloc(200_000, 1).toString('base64')
+    try {
+      await writeKitty(terminal, 'a=t,f=32,s=250,v=200,i=1,q=2', payload)
+      await writeKitty(terminal, 'a=t,f=32,s=250,v=200,i=2,q=2', payload)
+      // Placement bookkeeping only; a real addImage needs a canvas this env lacks.
+      storage._kittyIdToStorageId.set(1, 1001)
+      storage._storageIdToKittyId.set(1001, 1)
+      await writeKitty(terminal, 'a=t,f=32,s=250,v=200,i=3,q=2', payload)
+      expect(storage.getImage(1)).toBeDefined()
+      expect(storage.getImage(2)).toBeUndefined()
+      expect(storage.getImage(3).data.size).toBe(200_000)
+    } finally {
+      terminal.dispose()
+    }
+  })
+
+  it('stores an image larger than the byte budget rather than acking a dropped one', async () => {
+    const { terminal, handler } = createTerminal({ storageLimit: 0.5 })
+    const payload = Buffer.alloc(600_000, 1).toString('base64')
+    try {
+      await writeKitty(terminal, 'a=t,f=32,s=500,v=300,i=1,q=2', payload)
+      expect(handler._kittyStorage.getImage(1).data.size).toBe(600_000)
+    } finally {
+      terminal.dispose()
+    }
+  })
 })

@@ -33,11 +33,15 @@ patch still written by hand — see [Known Gaps](#known-gaps).
 The image patch bounds pending Kitty decoders by their maximum WASM capacity
 and caps transmitted image blobs by byte size. Both use the configured storage
 budget; upstream's displayed-pixel budget does not cover these allocations.
-Byte-budget FIFO eviction can remove displayed images too; preserving visible
-placements must not let retained image payloads exceed the memory budget. Orca
-uses fixed 32 MB storage and 8 MiB sequence limits, not arbitrary addon configurations.
+Byte-budget eviction drops unplaced payloads first, so a new upload cannot erase a
+visible image while abandoned blobs still hold budget; displayed images go only
+when that is not enough, because the cap is a hard bound. The incoming image is
+always stored, so the cap overshoots by at most one payload rather than dropping
+an image the protocol already acked as `OK`. Orca uses fixed 32 MB storage and
+8 MiB sequence limits, not arbitrary addon configurations.
 `config/scripts/xterm-image-memory-contract.test.mjs` exercises the installed
-bundle with unfinished uploads, chunk continuation, FIFO eviction and disposal.
+bundle with unfinished uploads, chunk continuation, both eviction orders and
+disposal.
 The patch also bounds decompression before joining decoded chunks, validates PNG
 dimensions before native decoding, and closes stale asynchronous image results
 after reset, disable or disposal. `config/scripts/xterm-image-lifecycle-contract.test.mjs`

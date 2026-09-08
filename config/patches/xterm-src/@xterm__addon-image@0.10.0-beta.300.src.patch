@@ -282,23 +282,30 @@ index de889dfff75d9ecc8ab47a025e6989ffe75bb202..9575d30b597e2d1557ca4cb29f10ecac
      let offset = 0;
      for (const chunk of chunks) {
 diff --git a/src/kitty/KittyImageStorage.ts b/src/kitty/KittyImageStorage.ts
-index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..617005ae463dee20807ff47cde3192c6d142789b 100644
+index 1f5c09ec9e2700f8f6dbd8436a1802217dfc99ef..016943a77c7e8e27da5899d54cd48d82761a87c8 100644
 --- a/src/kitty/KittyImageStorage.ts
 +++ b/src/kitty/KittyImageStorage.ts
-@@ -83,6 +83,18 @@ export class KittyImageStorage implements IDisposable {
+@@ -83,6 +83,25 @@ export class KittyImageStorage implements IDisposable {
        this._evictUndisplayedImages();
      }
  
 +    // Encoded images awaiting placement are outside ImageStorage's pixel budget.
++    // Unplaced payloads are evicted first so a new upload cannot erase a visible
++    // image while abandoned blobs still hold budget; placed ones go only when
++    // that is not enough, because the byte cap is a hard bound. The new image is
++    // always stored, so an oversized one overshoots by at most one payload
++    // (itself bounded by kittySizeLimit) rather than being dropped after an OK ack.
 +    const byteLimit = this._storage.getLimit() * 1000000;
 +    this._images.delete(imageId);
-+    if (imageData.data.size > byteLimit) return imageId;
 +    let retainedBytes = 0;
 +    for (const image of this._images.values()) retainedBytes += image.data.size;
-+    for (const [oldestId, image] of this._images) {
-+      if (retainedBytes + imageData.data.size <= byteLimit) break;
-+      retainedBytes -= image.data.size;
-+      this.deleteById(oldestId);
++    for (const evictPlaced of [false, true]) {
++      for (const [oldestId, image] of this._images) {
++        if (retainedBytes + imageData.data.size <= byteLimit) break;
++        if (this._kittyIdToStorageId.has(oldestId) !== evictPlaced) continue;
++        retainedBytes -= image.data.size;
++        this.deleteById(oldestId);
++      }
 +    }
 +
      this._images.set(imageId, {

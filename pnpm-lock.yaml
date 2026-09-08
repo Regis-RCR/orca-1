@@ -110,7 +110,7 @@ overrides:
 
 patchedDependencies:
   '@vscode/windows-process-tree@0.8.0': e66202cc623996d02040c93449eb9ae353fddadf426cb53202a59ee710ee6fe7
-  '@xterm/addon-image@0.10.0-beta.300': 0d40d95126ca0a8739d9cf7c6a8ed5aa05f5142a0d9d8023fc619ce126d03e0f
+  '@xterm/addon-image@0.10.0-beta.300': bc67f7078c2e32a121393a4f29ce3f76cf562974ae3376d703f22b6bee99edae
   '@xterm/addon-ligatures@0.11.0-beta.300': 47405b9994b5acf1b4e90b49250358c1ca03649854d59560e7732b72fe336920
   '@xterm/addon-search@0.17.0-beta.300': eee5338dd2621ece46e79c61ec06766cd7fadaf79ffdb24e2a8ab68e97ef31f0
   '@xterm/addon-serialize@0.15.0-beta.300': 851eac3d75e6d8c013b9f4c053e61d824b23965cb19ecc28e335e05059f3a294
@@ -327,7 +327,7 @@ importers:
         version: 0.12.0-beta.300(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))
       '@xterm/addon-image':
         specifier: 0.10.0-beta.300
-        version: 0.10.0-beta.300(patch_hash=0d40d95126ca0a8739d9cf7c6a8ed5aa05f5142a0d9d8023fc619ce126d03e0f)(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))
+        version: 0.10.0-beta.300(patch_hash=bc67f7078c2e32a121393a4f29ce3f76cf562974ae3376d703f22b6bee99edae)(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))
       '@xterm/addon-ligatures':
         specifier: 0.11.0-beta.300
         version: 0.11.0-beta.300(patch_hash=47405b9994b5acf1b4e90b49250358c1ca03649854d59560e7732b72fe336920)(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))
@@ -10446,7 +10446,7 @@ snapshots:
     dependencies:
       '@xterm/xterm': 6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4)
 
-  '@xterm/addon-image@0.10.0-beta.300(patch_hash=0d40d95126ca0a8739d9cf7c6a8ed5aa05f5142a0d9d8023fc619ce126d03e0f)(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))':
+  '@xterm/addon-image@0.10.0-beta.300(patch_hash=bc67f7078c2e32a121393a4f29ce3f76cf562974ae3376d703f22b6bee99edae)(@xterm/xterm@6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4))':
     dependencies:
       '@xterm/xterm': 6.1.0-beta.303(patch_hash=1f36ce689bc50c703ae09aeda0e064f107e18e4a5ecba19e746fa5edc4b02ef4)
 
