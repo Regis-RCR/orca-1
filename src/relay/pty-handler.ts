@@ -802,8 +802,7 @@ export class PtyHandler {
         TERM_PROGRAM: 'Orca',
         TERM_PROGRAM_VERSION:
           rendererEnv?.ORCA_APP_VERSION || process.env.ORCA_APP_VERSION || '0.0.0-dev',
-        FORCE_HYPERLINK: '1',
-        [ORCA_IMAGE_PROTOCOL_ENV]: ORCA_IMAGE_PROTOCOL_VALUE
+        FORCE_HYPERLINK: '1'
       },
       rendererEnv
     ) as Record<string, string>
@@ -818,6 +817,7 @@ export class PtyHandler {
       }
     }
     const result = mergeGitConfigEnvProtocol(baseEnv, augmented) as Record<string, string>
+    result[ORCA_IMAGE_PROTOCOL_ENV] = ORCA_IMAGE_PROTOCOL_VALUE
     // Why: an older client may not ask a newly upgraded relay to delete inherited shim state.
     stripLegacyTerminalShimEnv(result, process.platform)
     // Why unconditionally here, not in injectRelayFishHistoryEnv: that runs only for a

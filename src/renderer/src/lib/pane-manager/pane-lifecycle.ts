@@ -109,9 +109,7 @@ export function openTerminal(
   if (ligaturesEnabled) {
     attachLigatures(pane)
   }
-  // Attach before PTY connect installs Orca's DA1 handler so Orca keeps DA1
-  // authority; the addon's replies still flow through onData and are dropped
-  // during replay by forwardPtyInput, so no query leaks into the shell.
+  // Deferred attachment restores Orca's DA1 handler after the addon registers its own.
   if (inlineImagesEnabled) {
     attachInlineImages(pane)
   }

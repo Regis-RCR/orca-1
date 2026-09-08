@@ -82,6 +82,9 @@ test('inline images stay bounded and recover through SSH drop and stall', async 
     await emit('after-flood-reset')
     expect((await readInlineImageState(orcaPage))?.pending).toBe(0)
     const beforeZoom = await readInlineImageState(orcaPage)
+    if (!beforeZoom) {
+      throw new Error('Image addon missing before zoom')
+    }
     await orcaPage.evaluate(async () => {
       await window.__store!.getState().updateSettings({ terminalFontSize: 28 })
     })
@@ -95,7 +98,11 @@ test('inline images stay bounded and recover through SSH drop and stall', async 
       )
       .toBe(28)
     await assertInlineImagePixels(orcaPage, testInfo.outputPath('after-font-zoom.png'))
-    expect((await readInlineImageState(orcaPage))?.storageMB).toBe(beforeZoom?.storageMB)
+    const afterZoom = await readInlineImageState(orcaPage)
+    if (!afterZoom) {
+      throw new Error('Image addon missing after zoom')
+    }
+    expect(afterZoom.storageMB).toBe(beforeZoom.storageMB)
     await testInfo.attach('image-memory-counts', {
       body: JSON.stringify(flooded),
       contentType: 'application/json'

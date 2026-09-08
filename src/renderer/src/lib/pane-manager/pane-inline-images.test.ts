@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Terminal } from '@xterm/headless'
 
+const { activation, disposeSpy } = vi.hoisted(() => ({
+  activation: { fail: false },
+  disposeSpy: vi.fn()
+}))
+
 vi.mock('@xterm/addon-image', () => ({
   ImageAddon: class {
     options: unknown
@@ -8,9 +13,14 @@ vi.mock('@xterm/addon-image', () => ({
     constructor(options?: unknown) {
       this.options = options
     }
-    activate(): void {}
+    activate(): void {
+      if (activation.fail) {
+        throw new Error('partial activation')
+      }
+    }
     dispose(): void {
       this.disposed = true
+      disposeSpy()
     }
   }
 }))
@@ -81,6 +91,23 @@ describe('pane inline images', () => {
     expect(pane.imageAddon).not.toBeNull()
     setInlineImagesEnabled(pane, false)
     expect(pane.imageAddon).toBeNull()
+  })
+
+  it('disposes a partially activated addon and allows a later retry', () => {
+    const pane = makePane(7)
+    const before = disposeSpy.mock.calls.length
+    activation.fail = true
+    try {
+      attachInlineImages(pane)
+      expect(pane.imageAddon).toBeNull()
+      expect(disposeSpy).toHaveBeenCalledTimes(before + 1)
+    } finally {
+      activation.fail = false
+    }
+    attachInlineImages(pane)
+    expect(pane.imageAddon).not.toBeNull()
+    detachInlineImages(pane)
+    pane.terminal.dispose()
   })
 
   it('passes the perf-tuned options to the addon', () => {

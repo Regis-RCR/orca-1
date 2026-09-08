@@ -1,3 +1,5 @@
+import type { ImageAddon } from '@xterm/addon-image'
+import { refreshTerminalDa1Owner } from './terminal-da1-ownership'
 import type { ManagedPaneInternal } from './pane-manager-types'
 import {
   getTerminalImageAddonConstructor,
@@ -35,13 +37,21 @@ export function attachInlineImages(pane: ManagedPaneInternal): void {
   }
   panesAwaitingImageAddon.delete(pane)
   pane.imageAttachmentDeferred = false
+  let imageAddon: ImageAddon | null = null
   try {
-    const imageAddon = new ImageAddonConstructor(buildInlineImageAddonOptions())
+    imageAddon = new ImageAddonConstructor(buildInlineImageAddonOptions())
     pane.terminal.loadAddon(imageAddon)
     pane.imageAddon = imageAddon
   } catch (err) {
     console.warn('[terminal] inline-image addon failed to attach for pane', pane.id, err)
+    try {
+      imageAddon?.dispose()
+    } catch {
+      /* Activation may have failed before addon disposal was fully initialized. */
+    }
     pane.imageAddon = null
+  } finally {
+    refreshTerminalDa1Owner(pane.terminal)
   }
 }
 

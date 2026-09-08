@@ -1,3 +1,4 @@
+import { registerTerminalDa1Owner } from '../../lib/pane-manager/terminal-da1-ownership'
 import type { IDisposable, IParser, Terminal } from '@xterm/xterm'
 import {
   sendTerminalOscColorQueryReplies as sendTerminalOscColorQueryRepliesForColors,
@@ -140,20 +141,22 @@ export function installTerminalCapabilityReplyHandlers(
   deps: TerminalCapabilityRepliesDeps
 ): IDisposable {
   const disposables = [
-    deps.parser.registerCsiHandler(
-      { final: 'c' },
-      guardParserHandler('csi-da1', (params) => {
-        if (!isPrimaryDeviceAttributesQuery(params)) {
-          return false
-        }
-        // Why: restored scrollback may contain old DA1 queries; answering those
-        // into the fresh shell recreates the stray-input leak this handler fixes.
-        if (!deps.isReplaying()) {
-          const base = deps.da1Response ?? DEFAULT_DA1_RESPONSE
-          deps.sendInput(deps.sixelSupported?.() ? withSixelDa1Attribute(base) : base)
-        }
-        return true
-      })
+    registerTerminalDa1Owner(deps.terminal, () =>
+      deps.parser.registerCsiHandler(
+        { final: 'c' },
+        guardParserHandler('csi-da1', (params) => {
+          if (!isPrimaryDeviceAttributesQuery(params)) {
+            return false
+          }
+          // Why: restored scrollback may contain old DA1 queries; answering those
+          // into the fresh shell recreates the stray-input leak this handler fixes.
+          if (!deps.isReplaying()) {
+            const base = deps.da1Response ?? DEFAULT_DA1_RESPONSE
+            deps.sendInput(deps.sixelSupported?.() ? withSixelDa1Attribute(base) : base)
+          }
+          return true
+        })
+      )
     ),
     deps.parser.registerOscHandler(
       10,
