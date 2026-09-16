@@ -11,7 +11,10 @@ import {
   releaseDaemonAdoptionLease,
   takeDaemonAdoptionLeaseRelease
 } from './daemon-endpoint-adoption'
-import { createLegacyDaemonAdapters } from './daemon-legacy-adapters'
+import {
+  createLegacyDaemonAdapters,
+  type DaemonLegacyGenerationRegistryEntry
+} from './daemon-legacy-adapters'
 import {
   getDaemonHistoryDir as getHistoryDir,
   getDaemonRuntimeDir as getRuntimeDir,
@@ -112,13 +115,15 @@ export async function initDaemonPtyProvider(
     }
   })
   let legacyAdapters: DaemonPtyAdapter[] = []
+  let legacyGenerationRegistry: DaemonLegacyGenerationRegistryEntry[] = []
   let routedAdapter: DaemonProvider = newAdapter
   try {
     // Why: the launcher's temporary pair closes only after this permanent pair is established, leaving no adoption gap.
     await newAdapter.establishLifecycleLease()
     releaseDaemonAdoptionLease(newSpawner.getHandle())
 
-    legacyAdapters = await createLegacyDaemonAdapters(runtimeDir)
+    ;({ adapters: legacyAdapters, registry: legacyGenerationRegistry } =
+      await createLegacyDaemonAdapters(runtimeDir))
     routedAdapter =
       launchMode === 'degraded-new-pty-fallback'
         ? new DegradedDaemonPtyProvider({
@@ -131,7 +136,8 @@ export async function initDaemonPtyProvider(
         : legacyAdapters.length > 0
           ? new DaemonPtyRouter({
               current: newAdapter,
-              legacy: legacyAdapters
+              legacy: legacyAdapters,
+              registry: legacyGenerationRegistry
             })
           : newAdapter
     if (routedAdapter instanceof DegradedDaemonPtyProvider) {
