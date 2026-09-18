@@ -386,6 +386,24 @@ describe('local rows the snapshot carries no answer for', () => {
     expect(merged.activeWorktreeId).toBe(OTHER_WORKTREE)
   })
 
+  it('does not stand the user in a workspace that survived in neither side', () => {
+    // The boundary the presence rule actually draws, and the only case that separates it from
+    // "always preserve": an emptied row is evidence the workspace exists, but NO row on either
+    // side is not. Preserving here would leave the user pointed at a workspace the merge has no
+    // record of, which is the home screen's job to catch.
+    const current = sessionState()
+    const remote = sessionState({
+      activeWorktreeId: null,
+      activeWorkspaceKey: null,
+      activeRepoId: null
+    })
+
+    const merged = merge(current, remote)
+
+    expect(merged.activeWorktreeId).toBeNull()
+    expect(merged.activeWorkspaceKey).toBeNull()
+  })
+
   it('invents no row for a worktree neither side has one for', () => {
     // The counterweight: presence has to come from a real local row, not from membership in the
     // replace set, or a never-initialized workspace gets a tombstone it never earned.
