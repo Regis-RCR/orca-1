@@ -7,13 +7,10 @@
 // a CHECK failure becomes nameable without shipping raw memory anywhere.
 
 import type { Dirent } from 'node:fs'
-import { readdir, rm, stat } from 'node:fs/promises'
+import { open, readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { app, crashReporter } from 'electron'
-import {
-  NodeFileReadTooLargeError,
-  readNodeFileWithinLimit
-} from '../../shared/node-bounded-file-reader'
+import { createMinidumpFileSource, observeMinidumpExtent } from './minidump-file-source'
 import {
   parseMinidumpCrashSignature,
   type MinidumpCrashSignature
@@ -296,12 +293,21 @@ export async function captureMinidumpSignature(
       }
       reservedDumpPaths.add(dump.filePath)
       try {
-        const { buffer } = await readNodeFileWithinLimit(dump.filePath, MAX_DUMP_BYTES, {
-          followGrowth: false
-        })
-        const signature = parseMinidumpCrashSignature(buffer, {
-          expectedProcessType: options.expectedProcessType
-        })
+        const handle = await open(dump.filePath, 'r')
+        let signature: MinidumpCrashSignature | null
+        let sizeBytes: number
+        try {
+          const stats = await handle.stat()
+          sizeBytes = await observeMinidumpExtent(handle, stats.size)
+          signature = await parseMinidumpCrashSignature(
+            createMinidumpFileSource(handle, sizeBytes),
+            {
+              expectedProcessType: options.expectedProcessType
+            }
+          )
+        } finally {
+          await handle.close()
+        }
         if (
           !signature ||
           (options.expectedProcessType !== undefined &&
@@ -311,12 +317,7 @@ export async function captureMinidumpSignature(
           return null
         }
         claimedDumpPaths.set(dump.filePath, dump.mtimeMs)
-        return { filePath: dump.filePath, sizeBytes: buffer.byteLength, signature }
-      } catch (error) {
-        if (error instanceof NodeFileReadTooLargeError) {
-          return null
-        }
-        throw error
+        return { filePath: dump.filePath, sizeBytes, signature }
       } finally {
         reservedDumpPaths.delete(dump.filePath)
       }

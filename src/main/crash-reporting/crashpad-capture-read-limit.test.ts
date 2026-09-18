@@ -111,7 +111,7 @@ afterEach(async () => {
 })
 
 it.each(['growth', 'replacement'] as const)(
-  'skips %s past existing limit and captures next valid dump',
+  'captures %s past the initial limit without a whole-file allocation',
   async (kind) => {
     const next = await file('next.dmp')
     const unfinished = rendererDump()
@@ -135,8 +135,9 @@ it.each(['growth', 'replacement'] as const)(
       }
     }
     const result = await capture()
-    expect(Math.max(0, ...state.parsedBytes)).toBeLessThanOrEqual(LIMIT)
-    expect(result?.filePath).toBe(next)
+    expect(state.parsedBytes).toEqual([LIMIT + 1024 * 1024])
+    expect(result?.filePath).toBe(race)
+    expect(next).not.toBe(race)
   }
 )
 
@@ -226,4 +227,18 @@ it('records bytes actually parsed when permitted growth follows directory stat',
   }
   expect((await capture())?.sizeBytes).toBe(132)
   expect(state.parsedBytes).toEqual([132])
+})
+
+it('captures a size-zero opened dump that gains contents before its first read', async () => {
+  const race = await file('racing.dmp', false, Buffer.alloc(0))
+  state.callbacks.afterOpenStat = async (path) => {
+    if (path === race) {
+      state.callbacks.afterOpenStat = undefined
+      await writeFile(path, rendererDump())
+    }
+  }
+  const result = await capture()
+  expect(result?.filePath).toBe(race)
+  expect(result?.signature.processType).toBe('renderer')
+  expect(result?.sizeBytes).toBe(131)
 })

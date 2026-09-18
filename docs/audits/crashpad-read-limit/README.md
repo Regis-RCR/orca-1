@@ -78,3 +78,13 @@ The caller before this patch is byte-identical on main
 `291b4ddd6f1c1af480169885e0fda7f9c78ff053`, and the reused bounded reader exists there. The exact
 production patch passes an alternate-index apply check against that base; no earlier audit
 fix is required.
+
+## Follow-up: preserve growing-dump diagnostics with bounded range reads
+
+The quota-only implementation above is superseded by a file-backed parser. The directory's existing 64 MiB candidate policy remains, but growth/replacement after that observation no longer rejects a dump merely because the opened file exceeds the quota. The same metadata parser now reads bounded ranges through a 64 KiB page; the embedded-log parser scans once in 1 MiB windows with overlapping prefix/suffix bytes. It preserves severity ordering, the first 256 markers per severity, annotation precedence, module bounds, and full check messages. Nonempty files retain the opened extent; zero-size files observe through EOF as the previous native Buffer reader did. Every descriptor closes before capture resolves.
+
+The production tests cover an 80 MiB sparse dump, metadata RVAs beyond 64 MiB, markers/full 4,000-byte messages across seven block offsets, growth and replacement during capture, zero-size growth, truncation, and existing crashpad/parser behavior. The largest requested read is 1 MiB + 4,096 bytes, plus the 64 KiB metadata page; dump-sized allocation is removed. The generic bounded-reader option introduced by the earlier follow-up is removed because capture no longer needs it.
+
+`stream-signature-parity.cjs` compares 47 fixtures against the exact prior published parser `09dbe227547fadaec8d9163f35fd127b0dc1c3ed`, both in memory and through real file handles. It reuses the checked-in minidump fixture builder and checks annotations, modules, exception attribution, chunk boundaries, severity and marker exhaustion. Its result file also records five warm measurements for 8/64 MiB sparse dumps; these are local synthetic timings, not a platform-wide performance guarantee. Run from the checkout with `ORCA_BACKGROUND_LAUNCH=1 node docs/audits/crashpad-read-limit/stream-signature-parity.cjs`.
+
+This removes the newly introduced diagnostic-loss case without claiming an atomic snapshot against in-place rewrites. Source size remains the observed extent, not the number of sparse metadata bytes actually fetched. Crash dumps already over 64 MiB at directory discovery retain the pre-existing exclusion. No evidence ties this race to the reported user OOM incidents.
