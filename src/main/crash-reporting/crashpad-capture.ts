@@ -299,12 +299,11 @@ export async function captureMinidumpSignature(
         try {
           const stats = await handle.stat()
           sizeBytes = await observeMinidumpExtent(handle, stats.size)
-          signature = await parseMinidumpCrashSignature(
-            createMinidumpFileSource(handle, sizeBytes),
-            {
-              expectedProcessType: options.expectedProcessType
-            }
-          )
+          const source = createMinidumpFileSource(handle, sizeBytes)
+          signature = await parseMinidumpCrashSignature(source, {
+            expectedProcessType: options.expectedProcessType
+          })
+          sizeBytes = source.byteLength
         } finally {
           await handle.close()
         }

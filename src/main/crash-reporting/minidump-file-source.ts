@@ -24,8 +24,8 @@ export async function observeMinidumpExtent(
 
 /** Keep metadata seeks cheap without retaining the dump's captured process memory. */
 export function createMinidumpFileSource(handle: FileHandle, byteLength: number): MinidumpSource {
-  let page: Buffer = Buffer.alloc(0)
-  let pageOffset = 0
+  const pages = new Map<number, Buffer>()
+  let extent = byteLength
 
   async function readRange(offset: number, size: number): Promise<Buffer> {
     const bytes = Buffer.allocUnsafe(size)
@@ -33,6 +33,7 @@ export function createMinidumpFileSource(handle: FileHandle, byteLength: number)
     while (read < size) {
       const result = await handle.read(bytes, read, size - read, offset + read)
       if (result.bytesRead === 0) {
+        extent = Math.min(extent, offset + read)
         break
       }
       read += result.bytesRead
@@ -40,22 +41,47 @@ export function createMinidumpFileSource(handle: FileHandle, byteLength: number)
     return bytes.subarray(0, read)
   }
 
+  async function pageAt(offset: number): Promise<Buffer> {
+    const cached = pages.get(offset)
+    if (cached) {
+      pages.delete(offset)
+      pages.set(offset, cached)
+      return cached
+    }
+    const page = await readRange(offset, Math.min(PAGE_BYTES, extent - offset))
+    pages.set(offset, page)
+    if (pages.size > 4) {
+      const oldest = pages.keys().next().value
+      if (oldest !== undefined) {
+        pages.delete(oldest)
+      }
+    }
+    return page
+  }
+
   return {
-    byteLength,
+    get byteLength() {
+      return extent
+    },
     async read(offset, size) {
-      const length = Math.max(0, Math.min(size, byteLength - offset))
+      const length = Math.max(0, Math.min(size, extent - offset))
       if (length === 0) {
         return Buffer.alloc(0)
-      }
-      if (offset >= pageOffset && offset + length <= pageOffset + page.length) {
-        return page.subarray(offset - pageOffset, offset - pageOffset + length)
       }
       if (length > PAGE_BYTES) {
         return readRange(offset, length)
       }
-      pageOffset = offset
-      page = await readRange(offset, Math.min(PAGE_BYTES, byteLength - offset))
-      return page.subarray(0, length)
+      const start = Math.floor(offset / PAGE_BYTES) * PAGE_BYTES
+      const page = await pageAt(start)
+      const inPage = offset - start
+      if (inPage + length <= PAGE_BYTES || page.length < PAGE_BYTES) {
+        return page.subarray(inPage, inPage + length)
+      }
+      const nextPage = await pageAt(start + PAGE_BYTES)
+      return Buffer.concat([
+        page.subarray(inPage),
+        nextPage.subarray(0, length - (PAGE_BYTES - inPage))
+      ])
     }
   }
 }

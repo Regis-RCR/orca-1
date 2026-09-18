@@ -1,7 +1,7 @@
 import { mkdtemp, open, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { createMinidumpFileSource } from './minidump-file-source'
 import { parseMinidumpCrashSignature } from './minidump-crash-signature'
 
@@ -128,6 +128,50 @@ it('does not read outside the opened extent, including truncation and EOF', asyn
     await truncate(path, 4)
     const truncated = createMinidumpFileSource(handle, 32)
     expect(await parseMinidumpCrashSignature(truncated)).toBeNull()
+  } finally {
+    await handle.close()
+  }
+})
+
+it('avoids rereading distant name and module-table pages for a 1,042-module renderer', async () => {
+  const path = await sourceFile()
+  const handle = await open(path, 'r+')
+  const count = 1042
+  const namesOffset = 1024 * 1024
+  const moduleOffset = 56
+  const exceptionOffset = moduleOffset + 4 + count * 108
+  try {
+    const table = Buffer.alloc(exceptionOffset + 40)
+    header().copy(table)
+    table.writeUInt32LE(2, 8)
+    table.writeUInt32LE(4, 32)
+    table.writeUInt32LE(4 + count * 108, 36)
+    table.writeUInt32LE(moduleOffset, 40)
+    table.writeUInt32LE(6, 44)
+    table.writeUInt32LE(40, 48)
+    table.writeUInt32LE(exceptionOffset, 52)
+    table.writeUInt32LE(count, moduleOffset)
+    const names = Buffer.alloc(count * 32)
+    for (let index = 0; index < count; index++) {
+      const record = moduleOffset + 4 + index * 108
+      table.writeBigUInt64LE(BigInt(index * 4096), record)
+      table.writeUInt32LE(4096, record + 8)
+      table.writeUInt32LE(namesOffset + index * 32, record + 20)
+      const name = Buffer.from(`module${index}`, 'utf16le')
+      names.writeUInt32LE(name.length, index * 32)
+      name.copy(names, index * 32 + 4)
+    }
+    table.writeUInt32LE(0x80000003, exceptionOffset + 8)
+    table.writeBigUInt64LE(BigInt((count - 1) * 4096 + 1), exceptionOffset + 24)
+    await handle.write(table, 0, table.length, 0)
+    await handle.write(names, 0, names.length, namesOffset)
+    const read = vi.spyOn(handle, 'read')
+    const result = await parseMinidumpCrashSignature(
+      createMinidumpFileSource(handle, namesOffset + names.length)
+    )
+    expect(result?.faultingModule).toBe(`module${count - 1}`)
+    expect(result?.faultingModuleOffset).toBe('0x1')
+    expect(read.mock.calls.length).toBeLessThanOrEqual(8)
   } finally {
     await handle.close()
   }

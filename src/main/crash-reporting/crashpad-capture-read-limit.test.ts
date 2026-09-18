@@ -242,3 +242,16 @@ it('captures a size-zero opened dump that gains contents before its first read',
   expect(result?.signature.processType).toBe('renderer')
   expect(result?.sizeBytes).toBe(131)
 })
+
+it('reports the observed shorter extent when the opened dump shrinks while reading', async () => {
+  const race = await file('shrinking.dmp', false, Buffer.concat([rendererDump(), Buffer.alloc(10)]))
+  state.callbacks.afterOpenStat = async (path) => {
+    if (path === race) {
+      state.callbacks.afterOpenStat = undefined
+      await truncate(path, 131)
+    }
+  }
+  const result = await capture()
+  expect(result?.signature.processType).toBe('renderer')
+  expect(result?.sizeBytes).toBe(131)
+})
