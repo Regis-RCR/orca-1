@@ -8,19 +8,17 @@ const esbuild = require(path.join(process.cwd(), 'node_modules/esbuild'))
 const before = '09dbe227547fadaec8d9163f35fd127b0dc1c3ed'
 const prefix = 'src/main/crash-reporting/'
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orca-crash-stream-parity-'))
-const source = fs.readFileSync(prefix + 'minidump-crash-signature.test.ts', 'utf8')
-const fixture =
-  "const expect = (v) => ({toBe: (e) => {if(v!==e) throw new Error('fixture invariant')}});\n" +
-  source.slice(
-    source.indexOf('const STREAM_TYPE_'),
-    source.indexOf("describe('parseMinidumpCrashSignature'")
-  )
+const source = fs.readFileSync(`${prefix}minidump-crash-signature.test.ts`, 'utf8')
+const fixture = `const expect = (v) => ({toBe: (e) => {if(v!==e) throw new Error('fixture invariant')}});\n${source.slice(
+  source.indexOf('const STREAM_TYPE_'),
+  source.indexOf("describe('parseMinidumpCrashSignature'")
+)}`
 const line = '[8104:1234:0815/143022.123456:FATAL:render_frame_impl.cc(4821)] Check failed: !x.'
 async function build() {
   for (const variant of ['before', 'after']) {
     await esbuild.build({
-      entryPoints: [prefix + 'minidump-crash-signature.ts'],
-      outfile: path.join(dir, variant + '.cjs'),
+      entryPoints: [`${prefix}minidump-crash-signature.ts`],
+      outfile: path.join(dir, `${variant}.cjs`),
       bundle: true,
       platform: 'node',
       format: 'cjs',
@@ -38,7 +36,7 @@ async function build() {
                     (a) => ({
                       contents: cp.execFileSync(
                         'git',
-                        ['show', before + ':' + path.relative(process.cwd(), a.path)],
+                        ['show', `${before}:${path.relative(process.cwd(), a.path)}`],
                         { encoding: 'utf8' }
                       ),
                       loader: 'ts'
@@ -51,7 +49,7 @@ async function build() {
     })
   }
   await esbuild.build({
-    stdin: { contents: fixture + '\nexport {buildDump}', loader: 'ts', resolveDir: process.cwd() },
+    stdin: { contents: `${fixture}\nexport {buildDump}`, loader: 'ts', resolveDir: process.cwd() },
     outfile: path.join(dir, 'fixture.cjs'),
     bundle: true,
     platform: 'node',
@@ -59,7 +57,7 @@ async function build() {
     logLevel: 'silent'
   })
   await esbuild.build({
-    entryPoints: [prefix + 'minidump-file-source.ts'],
+    entryPoints: [`${prefix}minidump-file-source.ts`],
     outfile: path.join(dir, 'file.cjs'),
     bundle: true,
     platform: 'node',
@@ -88,7 +86,7 @@ async function build() {
           modules: Array.from({ length: moduleCount }, (_, i) => ({
             base: BigInt(0x1000 + i * 0x1000),
             size: 0x1000,
-            name: 'x' + i + '.dll'
+            name: `x${i}.dll`
           })),
           exception: { code: 0x80000003, address: 0x1001n }
         })
@@ -106,7 +104,7 @@ async function build() {
       }
     }
     for (const n of [255, 256, 257]) {
-      inputs.push(Buffer.concat([header, Buffer.from(':FATAL:bad\0'.repeat(n) + line + '\0')]))
+      inputs.push(Buffer.concat([header, Buffer.from(`${':FATAL:bad\0'.repeat(n) + line}\0`)]))
     }
     for (const bytes of inputs) {
       const expected = baseline(bytes)
@@ -140,7 +138,9 @@ async function build() {
               await h.close()
             }
           }
-          if (i > 0) samples[mode].push(performance.now() - t)
+          if (i > 0) {
+            samples[mode].push(performance.now() - t)
+          }
         }
       }
       timing.push({ sizeMiB: size, ...samples })
