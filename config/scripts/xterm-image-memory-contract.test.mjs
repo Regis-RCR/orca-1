@@ -23,13 +23,15 @@ function writeKitty(terminal, command, payload) {
 
 describe('xterm image memory contract', () => {
   it('does not emit a reply when evicting an id-less upload', async () => {
-    const { terminal } = createTerminal()
+    const { terminal, handler } = createTerminal()
     const replies = []
     terminal.onData((data) => replies.push(data))
     try {
       await writeKitty(terminal, 'a=t,f=32,s=1,v=1,m=1', 'AAAA')
       await writeKitty(terminal, 'a=t,f=32,s=1,v=1,i=1,m=1,q=2', 'AAAA')
       await writeKitty(terminal, 'a=t,f=32,s=1,v=1,i=2,m=1,q=2', 'AAAA')
+      expect(handler._pendingTransmissions.has(0)).toBe(false)
+      expect(handler._pendingTransmissions.size).toBe(2)
       expect(replies).toEqual([])
     } finally {
       terminal.dispose()

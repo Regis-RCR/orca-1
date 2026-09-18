@@ -27,3 +27,8 @@ export function getTerminalImageAddonConstructor(): ImageAddonConstructor | null
 export function primeTerminalImageAddon(): Promise<void> {
   return loader.prime()
 }
+
+/** A user toggle allows another bounded load attempt. */
+export function rearmTerminalImageAddonLoad(): void {
+  loader.rearm()
+}

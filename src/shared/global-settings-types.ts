@@ -133,7 +133,7 @@ export type GlobalSettings = {
   /** Whether inline terminal images are rendered via `@xterm/addon-image`
    *  (SIXEL, iTerm2 IIP, and Kitty graphics). The addon is lazy-loaded and its
    *  canvas layers are only created once a pane actually receives an image, so
-   *  idle panes pay no cost when this is on. */
+   *  idle panes retain parser/decoder setup but no decoded image storage. */
   terminalInlineImages: boolean
   terminalCursorStyle: 'bar' | 'block' | 'underline'
   /** One-shot migration guard for moving inherited cursor defaults to block. */

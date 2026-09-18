@@ -5,6 +5,7 @@ import type { ManagedPaneInternal } from './pane-manager-types'
 import {
   getTerminalImageAddonConstructor,
   primeTerminalImageAddon,
+  rearmTerminalImageAddonLoad,
   setTerminalImageAddonLoadHandlers
 } from './terminal-image-addon-loader'
 import { buildInlineImageAddonOptions } from './terminal-inline-image-options'
@@ -93,6 +94,7 @@ export function setInlineImagesEnabled(pane: ManagedPaneInternal, enabled: boole
   if (enabled) {
     attachInlineImages(pane)
   } else {
+    rearmTerminalImageAddonLoad()
     detachInlineImages(pane)
   }
 }

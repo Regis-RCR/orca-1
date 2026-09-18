@@ -63,7 +63,7 @@ export function createLazyXtermAddonLoader<TConstructor>(config: {
       return load
     },
     rearm: () => {
-      if (constructor) {
+      if (constructor || load) {
         return
       }
       load = null
