@@ -6,6 +6,7 @@ import type {
 import { useHostClient } from '../transport/client-context'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
+import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
 class BridgeViewGoneError extends Error {
@@ -84,6 +85,8 @@ export function useMobileWebShellBridge(args: {
   session: MobileWebShellSessionState
   /** The screen the page is standing in for, which the document's own `/` cannot tell it. */
   route: BridgeInitRoute
+  /** The page could not render the generation on screen. Reported, never recovered from here. */
+  onPageFault: (error: BridgeErrorCapture) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -96,6 +99,10 @@ export function useMobileWebShellBridge(args: {
   // object in the deps would rebuild the host on every render and settle its pendings each time.
   const routeRef = useRef(args.route)
   routeRef.current = args.route
+  // Read through a ref for the same reason: a caller's fresh closure every render must not tear a
+  // host down and settle its pendings.
+  const pageFaultRef = useRef(args.onPageFault)
+  pageFaultRef.current = args.onPageFault
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -108,6 +115,9 @@ export function useMobileWebShellBridge(args: {
       buildId,
       sessionId,
       route: routeRef.current,
+      onPageFault: (error) => {
+        pageFaultRef.current(error)
+      },
       post: (json) => {
         const mounted = viewRef.current
         return mounted === null || mounted.sessionId !== sessionId
