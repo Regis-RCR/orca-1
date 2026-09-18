@@ -27,6 +27,7 @@ export type BridgeClientNotifications = {
   ) => void
   notifyForeground: (reason?: ForegroundNudgeReason) => void
   notifyNavigate: (href: string) => boolean
+  notifyStorageWrite: (key: string, value: string | null) => boolean
 }
 
 export function createBridgeClientNotifications(
@@ -60,6 +61,11 @@ export function createBridgeClientNotifications(
     // the whole frame, and a tap handler needs to know that before it decides it has navigated.
     notifyNavigate: (href) =>
       deps.hasGrant('navigate') &&
-      post({ v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'navigate', href })
+      post({ v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'navigate', href }),
+    // The page's writes reach the app's own store, which is the only store it has: its `localStorage`
+    // is off on Android and per-session on iOS, so a pin kept there would forget itself on remount.
+    notifyStorageWrite: (key, value) =>
+      deps.hasGrant('storage') &&
+      post({ v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'storage', key, value })
   }
 }

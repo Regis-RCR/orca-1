@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import { Alert } from 'react-native'
 import type { useRouter } from 'expo-router'
 import { floatingWorkspaceSessionPath } from '../session/floating-workspace'
 import { savePinnedIds } from '../storage/preferences'
@@ -41,6 +40,7 @@ export function useHostWorktreeActions(args: {
     newWorktreeModalVisibleRef,
     pinnedIds,
     setConfirmRemoveHost,
+    setError,
     setLastKnownWorktrees,
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
@@ -151,9 +151,11 @@ export function useHostWorktreeActions(args: {
     } catch {
       // Why: removal can fail while still paired; re-open confirm (ConfirmModal closes on confirm).
       setConfirmRemoveHost(true)
-      Alert.alert('Could not remove host', 'Please try again.')
+      // Not `Alert.alert`: it is a silent no-op in React Native Web, so inside the shell's page
+      // this failure had no surface at all. The list already has one, and it shows on both.
+      setError('Could not remove host. Please try again.')
     }
-  }, [hostId, leaveHost, forgetHostClient])
+  }, [hostId, leaveHost, forgetHostClient, setError])
 
   const navigateFromHostList = useCallback(
     (target: string) => {

@@ -32,7 +32,17 @@ const DIRECTORY = '/caches/mobile-web/deadbeef/generations/a1b2'
  *  host's teardown land in the page that replaced it. */
 type PostedFrame = { sessionId: string; json: string }
 
-type Probe = { view: MobileWebShellBridgeView | null; navigations: string[] }
+type Probe = {
+  view: MobileWebShellBridgeView | null
+  navigations: string[]
+  storageWrites: { key: string; value: string | null }[]
+}
+
+/** What the page cannot read for itself, as the screen hands it over. */
+const SNAPSHOT = {
+  host: { id: 'host-1', name: 'Host One', endpoint: 'ws://host-1', lastConnected: 7 },
+  storage: { 'orca:pins:host-1': '["wt-1"]' }
+}
 
 function fakeClient(): FakeRpcClient {
   const client = doubles.client
@@ -94,7 +104,9 @@ function Harness(props: {
     // Built inline on every render, as a caller writes it: the host is not rebuilt for it.
     route: { pathname: '/h/host-1' },
     pageRoutes: ['/h/[hostId]'],
-    onNavigate: (href) => props.probe.navigations.push(href)
+    onNavigate: (href) => props.probe.navigations.push(href),
+    snapshot: SNAPSHOT,
+    onStorageWrite: (key, value) => props.probe.storageWrites.push({ key, value })
   })
   props.probe.view = view
   return props.session.kind === 'ready'
@@ -131,7 +143,7 @@ let warned: MockInstance<typeof console.warn>
 
 async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
   const posted: PostedFrame[] = []
-  const probe: Probe = { view: null, navigations: [] }
+  const probe: Probe = { view: null, navigations: [], storageWrites: [] }
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   const render = (next: MobileWebShellSessionState): ReactElement =>
     createElement(Harness, { session: next, posted, probe })
@@ -200,7 +212,9 @@ describe('the bridge channel', () => {
       expect.objectContaining({
         type: 'init',
         route: { pathname: '/h/host-1' },
-        pageRoutes: ['/h/[hostId]']
+        pageRoutes: ['/h/[hostId]'],
+        host: SNAPSHOT.host,
+        storage: SNAPSHOT.storage
       })
     ])
   })
@@ -328,7 +342,7 @@ describe('client changes', () => {
   it('hands the host over in the commit, so no frame reaches the replaced client', async () => {
     const first = fakeClient()
     const posted: PostedFrame[] = []
-    const probe: Probe = { view: null, navigations: [] }
+    const probe: Probe = { view: null, navigations: [], storageWrites: [] }
     const render = (deliver: string | null): ReactElement =>
       createElement(DeliverDuringCommit, { deliver, posted, probe })
     const rendered: { tree: ReactTestRenderer | null } = { tree: null }

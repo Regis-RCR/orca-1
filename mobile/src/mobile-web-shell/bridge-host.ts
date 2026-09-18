@@ -14,6 +14,7 @@ import {
   type BridgeClientMessage,
   type BridgeConnectionSnapshot,
   type BridgeHostMessage,
+  type BridgeInitHost,
   type BridgeInitRoute
 } from './bridge/bridge-envelope'
 import { captureBridgeError } from './bridge/bridge-error-capture'
@@ -53,6 +54,12 @@ export type BridgeHostOptions = {
   route: BridgeInitRoute
   /** Every route pattern the shell would render from the page, so the page knows what to keep. */
   pageRoutes: readonly string[]
+  /** The host the page is showing, minus the credential the bridge already carries for it. */
+  host: BridgeInitHost
+  /** The allowlisted keys as the app holds them, which is the page's whole read side. */
+  storage: Readonly<Record<string, string>>
+  /** One allowlisted key written, or removed when the value is null. */
+  onStorageWrite: (key: string, value: string | null) => void
   /**
    * Opens a screen the page does not render. Required, because `init` grants `navigate` on the
    * strength of this existing: a page told it may hand a route back and then handed one back into
@@ -90,7 +97,7 @@ class BridgeReplyUndeliverableError extends Error {
  * page is told about in `init` are enforced here and not trusted from there.
  */
 export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
-  const { client, buildId, sessionId, route, pageRoutes } = options
+  const { client, buildId, sessionId, route, pageRoutes, host, storage } = options
   let closed = false
   // One document's turn at the bridge. `close` ends it and the next `ready` begins the next one;
   // between the two the view belongs to no document, so nothing is served and nothing is posted.
@@ -172,7 +179,9 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         native: [...MOBILE_WEB_SHELL_GRANTS]
       },
       route,
-      pageRoutes: [...pageRoutes]
+      pageRoutes: [...pageRoutes],
+      host,
+      storage: { ...storage }
     })
   }
 
@@ -230,6 +239,12 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         // Not routed to the client: this one never leaves the phone. The page asked for a screen
         // it does not render, and the caller pushes it over the still-mounted view.
         options.onNavigate(message.href)
+        return
+      }
+      if (message.name === 'storage') {
+        // Also local. The key is allowlisted by the envelope before this runs, so what reaches the
+        // app's store is one of the few the page was ever told about.
+        options.onStorageWrite(message.key, message.value)
         return
       }
       client.updateTerminalSubscriptionViewport(message.terminal, {

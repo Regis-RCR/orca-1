@@ -18,6 +18,14 @@ const HOST_ROUTE = '/h/render-check-host'
 // some other session, or against none, fails here rather than on a phone.
 const SHELL_SESSION_ID = 'render-check-session'
 const SHELL_BUILD_ID = 'render-check-build'
+// The host the shell opened the page for. Without it `expo-secure-store` is {} on web and the list
+// paints "Host not found" over a host that is right there.
+const SHELL_HOST = {
+  id: 'render-check-host',
+  name: 'Render Check Host',
+  endpoint: 'ws://render-check',
+  lastConnected: 1
+}
 
 // The sharded `test` job does not install mobile dependencies, so the page cannot be built there.
 // The CSP suite below needs none of them and still runs. pr.yml's mobile_web_app job runs both.
@@ -78,7 +86,7 @@ async function readBridgeProtocolVersion() {
  * place domain behaviour is decided, and every screen below already has a state for an RPC that
  * failed. The one message that matters here is the one that lets the tree mount.
  */
-function installShellDouble({ version, sessionId, buildId, route }) {
+function installShellDouble({ version, sessionId, buildId, route, host, storage }) {
   const channel = {
     postMessage: (json) => {
       const frame = JSON.parse(json)
@@ -104,7 +112,9 @@ function installShellDouble({ version, sessionId, buildId, route }) {
           },
           grants: { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] },
           // Omitted for a shell too old to name one, which is the case the page has a panel for.
-          ...(route === null ? {} : { route })
+          ...(route === null ? {} : { route }),
+          ...(host === null ? {} : { host }),
+          storage
         })
         return
       }
@@ -208,7 +218,10 @@ const UNMATCHED = 'Unmatched Route'
  * route itself from what the double names. Navigating straight to the route would hide exactly the
  * step this check exists to prove.
  */
-async function render(route, { shellRoute = { pathname: route } } = {}) {
+async function render(
+  route,
+  { shellRoute = { pathname: route }, shellHost = SHELL_HOST, shellStorage = {} } = {}
+) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   // At document start, where the native shell installs the real channel: the entry reads it
   // while its own script runs, so a channel added after `load` would already be too late.
@@ -216,7 +229,9 @@ async function render(route, { shellRoute = { pathname: route } } = {}) {
     version: bridgeVersion,
     sessionId: SHELL_SESSION_ID,
     buildId: SHELL_BUILD_ID,
-    route: shellRoute
+    route: shellRoute,
+    host: shellHost,
+    storage: shellStorage
   })
   const errors = []
   let reportUncaught = () => {}
@@ -294,7 +309,9 @@ async function renderWithoutTree({ shellRoute } = {}) {
       version: bridgeVersion,
       sessionId: SHELL_SESSION_ID,
       buildId: SHELL_BUILD_ID,
-      route: shellRoute
+      route: shellRoute,
+      host: SHELL_HOST,
+      storage: {}
     })
   }
   const errors = []
@@ -387,10 +404,10 @@ describeRender('the Route A page in a real browser', () => {
     expect(session).toEqual({ sessionId: SHELL_SESSION_ID, buildId: SHELL_BUILD_ID })
     // The document was served at `/`; the page put itself on the route the shell named.
     expect(url).toBe(HOST_ROUTE)
-    // app/h/[hostId]/index.tsx: expo-secure-store is {} on web, so loadHosts() finds no profile
-    // and the list paints its not-found state. Only that route's own component produces this
-    // string, and C1.4's host-store.web.ts is what replaces it with a real row.
-    expect(text).toContain('Host not found')
+    // The host the shell named, read through host-store.web.ts off `init.host`. Only that route's
+    // own component names the host; "Host not found" is what it paints without one.
+    expect(text).toContain(SHELL_HOST.name)
+    expect(text).not.toContain('Host not found')
     expect(text).not.toContain(UNMATCHED)
   }, 60_000)
 
@@ -419,6 +436,13 @@ describeRender('the Route A page in a real browser', () => {
     })
     expect(errors).toEqual([])
     expect(url).toBe(`${HOST_ROUTE}?from=render+check`)
+  }, 60_000)
+
+  it('paints the not-found state when the shell named no host, which is what makes the row real', async () => {
+    const { errors, text } = await render(HOST_ROUTE, { shellHost: null })
+    expect(errors).toEqual([])
+    expect(text).toContain('Host not found')
+    expect(text).not.toContain(SHELL_HOST.name)
   }, 60_000)
 
   it('mounts nothing at all when no shell answered, which is what makes the rest real', async () => {

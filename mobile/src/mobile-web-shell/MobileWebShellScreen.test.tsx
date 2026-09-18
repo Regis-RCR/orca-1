@@ -65,6 +65,15 @@ vi.mock('../../modules/orca-mobile-web-shell/src', async () => {
 // The real bridge hook runs, so the props it owns are the ones the view is handed here; only the
 // client lookup is stubbed, because reaching it imports the Expo runtime this test does not have.
 vi.mock('../transport/client-context', () => ({ useHostClient: () => ({ client: null }) }))
+// Reaching the real one imports the host store and expo-secure-store, whose module touches an Expo
+// global this test does not have. What it answers is the screen's input, not its behaviour.
+vi.mock('./use-page-host-snapshot', () => ({
+  usePageHostSnapshot: () => ({
+    host: { id: 'host-1', name: 'Host One', endpoint: 'ws://host-1', lastConnected: 3 },
+    storage: {}
+  }),
+  writePageStorage: () => {}
+}))
 vi.mock('./use-mobile-web-shell-session', () => ({
   useMobileWebShellSession: () => ({
     state: dependencies.state,

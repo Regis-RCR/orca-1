@@ -73,6 +73,8 @@ export type BridgeRpcClient = RpcClient & {
    * to do something else, and a thrown error in a tap handler is not that.
    */
   notifyNavigate: (href: string) => boolean
+  /** Writes one allowlisted key into the app's store. False when the shell granted no `storage`. */
+  notifyStorageWrite: (key: string, value: string | null) => boolean
 }
 
 /**
@@ -352,6 +354,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     onStateChange: (listener) => cache.onStateChange(listener),
     notifyForeground: notifications.notifyForeground,
     notifyNavigate: notifications.notifyNavigate,
+    notifyStorageWrite: notifications.notifyStorageWrite,
     close,
     onReady: (listener) => {
       if (session !== null) {

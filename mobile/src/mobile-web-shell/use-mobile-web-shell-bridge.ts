@@ -7,6 +7,7 @@ import { useHostClient } from '../transport/client-context'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
+import type { PageHostSnapshot } from './use-page-host-snapshot'
 
 class BridgeViewGoneError extends Error {
   constructor() {
@@ -88,6 +89,14 @@ export function useMobileWebShellBridge(args: {
   pageRoutes: readonly string[]
   /** Opens a screen the page does not render, over the still-mounted view. */
   onNavigate: (href: string) => void
+  /**
+   * This host and its stored keys, or null while they are being read. No host is built without
+   * them: `init` is answered once per `ready` and carries both, so a host that started without
+   * them would have to be torn down to carry them, and the page would have mounted its list
+   * against a host it could not name.
+   */
+  snapshot: PageHostSnapshot | null
+  onStorageWrite: (key: string, value: string | null) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -106,11 +115,14 @@ export function useMobileWebShellBridge(args: {
   // fresh closure every render must not tear one down and settle its pendings.
   const navigateRef = useRef(args.onNavigate)
   navigateRef.current = args.onNavigate
+  const storageWriteRef = useRef(args.onStorageWrite)
+  storageWriteRef.current = args.onStorageWrite
+  const snapshot = args.snapshot
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
   useLayoutEffect(() => {
-    if (client === null || sessionId === null || buildId === null) {
+    if (client === null || sessionId === null || buildId === null || snapshot === null) {
       return
     }
     const host = createBridgeHost({
@@ -121,6 +133,11 @@ export function useMobileWebShellBridge(args: {
       pageRoutes: pageRoutesRef.current,
       onNavigate: (href) => {
         navigateRef.current(href)
+      },
+      host: snapshot.host,
+      storage: snapshot.storage,
+      onStorageWrite: (key, value) => {
+        storageWriteRef.current(key, value)
       },
       post: (json) => {
         const mounted = viewRef.current
@@ -135,7 +152,7 @@ export function useMobileWebShellBridge(args: {
       hostRef.current = null
       host.dispose()
     }
-  }, [buildId, client, sessionId])
+  }, [buildId, client, sessionId, snapshot])
 
   return {
     bridgeEnabled: ready !== null,

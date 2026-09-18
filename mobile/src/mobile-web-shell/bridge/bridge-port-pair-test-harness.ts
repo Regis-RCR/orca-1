@@ -33,6 +33,8 @@ export type BridgePortPair = {
   hostDiagnostics: BridgeHostDiagnostic[]
   /** Every screen the page asked the shell to open, in order. */
   navigations: string[]
+  /** Every allowlisted key the page wrote through the shell, in order. */
+  storageWrites: { key: string; value: string | null }[]
   /** Runs both lanes until a full round moves nothing. */
   flush: () => Promise<void>
   /** Read back through the reader on the receiving side, so a frame this returns is one that lands. */
@@ -46,6 +48,7 @@ export type BridgePortPairOptions = {
   buildId?: string
   route?: BridgeInitRoute
   pageRoutes?: readonly string[]
+  storage?: Readonly<Record<string, string>>
 }
 
 type Lane = {
@@ -105,6 +108,7 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
   const diagnostics: BridgeRpcClientDiagnostic[] = []
   const hostDiagnostics: BridgeHostDiagnostic[] = []
   const navigations: string[] = []
+  const storageWrites: { key: string; value: string | null }[] = []
   let receiveOnPage: ((json: string) => void) | null = null
 
   const toPage = createLane((json) => {
@@ -121,6 +125,9 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
     route: options.route ?? { pathname: '/h/host-a' },
     pageRoutes: options.pageRoutes ?? ['/h/[hostId]'],
     onNavigate: (href) => navigations.push(href),
+    host: { id: 'host-a', name: 'Host A', endpoint: 'ws://host-a', lastConnected: 0 },
+    storage: options.storage ?? {},
+    onStorageWrite: (key, value) => storageWrites.push({ key, value }),
     onDiagnostic: (diagnostic) => hostDiagnostics.push(diagnostic)
   })
   const toShell = createLane((json) => {
@@ -148,6 +155,7 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
     diagnostics,
     hostDiagnostics,
     navigations,
+    storageWrites,
     async flush(): Promise<void> {
       for (let round = 0; round < 64; round += 1) {
         const moved = toShell.sent.length + toPage.sent.length

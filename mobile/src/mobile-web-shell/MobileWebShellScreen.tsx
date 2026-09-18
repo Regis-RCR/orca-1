@@ -18,6 +18,7 @@ import {
   useMobileWebShellSession,
   type MobileWebShellRuntime
 } from './use-mobile-web-shell-session'
+import { usePageHostSnapshot, writePageStorage } from './use-page-host-snapshot'
 
 // Same guard as the Troubleshoot developer row: `__DEV__` is undefined outside the React Native
 // runtime, and the facts below are for whoever is bringing the shell up, not for a user.
@@ -144,11 +145,14 @@ export function MobileWebShellScreen({
     routePathname: route.pathname,
     runtime
   })
+  const snapshot = usePageHostSnapshot(hostId)
   const bridge = useMobileWebShellBridge({
     hostId,
     route,
     pageRoutes,
     session: state,
+    snapshot,
+    onStorageWrite: writePageStorage,
     // Pushed, never replaced: the page stays mounted underneath, so Back reveals it with no
     // download and no second `init`.
     onNavigate: (href: string) => {
