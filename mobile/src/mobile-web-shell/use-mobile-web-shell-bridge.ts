@@ -84,6 +84,10 @@ export function useMobileWebShellBridge(args: {
   session: MobileWebShellSessionState
   /** The screen the page is standing in for, which the document's own `/` cannot tell it. */
   route: BridgeInitRoute
+  /** The route patterns the page keeps for itself; everything else comes back as `navigate`. */
+  pageRoutes: readonly string[]
+  /** Opens a screen the page does not render, over the still-mounted view. */
+  onNavigate: (href: string) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -96,6 +100,12 @@ export function useMobileWebShellBridge(args: {
   // object in the deps would rebuild the host on every render and settle its pendings each time.
   const routeRef = useRef(args.route)
   routeRef.current = args.route
+  const pageRoutesRef = useRef(args.pageRoutes)
+  pageRoutesRef.current = args.pageRoutes
+  // Read through a ref for the same reason: the host is built once per session, and a caller's
+  // fresh closure every render must not tear one down and settle its pendings.
+  const navigateRef = useRef(args.onNavigate)
+  navigateRef.current = args.onNavigate
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -108,6 +118,10 @@ export function useMobileWebShellBridge(args: {
       buildId,
       sessionId,
       route: routeRef.current,
+      pageRoutes: pageRoutesRef.current,
+      onNavigate: (href) => {
+        navigateRef.current(href)
+      },
       post: (json) => {
         const mounted = viewRef.current
         return mounted === null || mounted.sessionId !== sessionId

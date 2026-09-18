@@ -32,7 +32,7 @@ const DIRECTORY = '/caches/mobile-web/deadbeef/generations/a1b2'
  *  host's teardown land in the page that replaced it. */
 type PostedFrame = { sessionId: string; json: string }
 
-type Probe = { view: MobileWebShellBridgeView | null }
+type Probe = { view: MobileWebShellBridgeView | null; navigations: string[] }
 
 function fakeClient(): FakeRpcClient {
   const client = doubles.client
@@ -92,7 +92,9 @@ function Harness(props: {
     hostId: 'host-1',
     session: props.session,
     // Built inline on every render, as a caller writes it: the host is not rebuilt for it.
-    route: { pathname: '/h/host-1' }
+    route: { pathname: '/h/host-1' },
+    pageRoutes: ['/h/[hostId]'],
+    onNavigate: (href) => props.probe.navigations.push(href)
   })
   props.probe.view = view
   return props.session.kind === 'ready'
@@ -129,7 +131,7 @@ let warned: MockInstance<typeof console.warn>
 
 async function mount(session: MobileWebShellSessionState): Promise<Mounted> {
   const posted: PostedFrame[] = []
-  const probe: Probe = { view: null }
+  const probe: Probe = { view: null, navigations: [] }
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   const render = (next: MobileWebShellSessionState): ReactElement =>
     createElement(Harness, { session: next, posted, probe })
@@ -195,8 +197,21 @@ describe('the bridge channel', () => {
     const mounted = await mount(readyState('session-one'))
     await mounted.deliver(clientFrame({ type: 'ready' }))
     expect(mounted.frames('session-one')).toEqual([
-      expect.objectContaining({ type: 'init', route: { pathname: '/h/host-1' } })
+      expect.objectContaining({
+        type: 'init',
+        route: { pathname: '/h/host-1' },
+        pageRoutes: ['/h/[hostId]']
+      })
     ])
+  })
+
+  it('opens a screen the page hands back, through the caller that owns the stack', async () => {
+    const mounted = await mount(readyState('session-one'))
+    await mounted.deliver(clientFrame({ type: 'ready' }))
+    await mounted.deliver(
+      clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-1/session/wt-1' })
+    )
+    expect(mounted.probe.navigations).toEqual(['/h/host-1/session/wt-1'])
   })
 
   it('does not rebuild the host for a route object the caller built again', async () => {
@@ -313,7 +328,7 @@ describe('client changes', () => {
   it('hands the host over in the commit, so no frame reaches the replaced client', async () => {
     const first = fakeClient()
     const posted: PostedFrame[] = []
-    const probe: Probe = { view: null }
+    const probe: Probe = { view: null, navigations: [] }
     const render = (deliver: string | null): ReactElement =>
       createElement(DeliverDuringCommit, { deliver, posted, probe })
     const rendered: { tree: ReactTestRenderer | null } = { tree: null }

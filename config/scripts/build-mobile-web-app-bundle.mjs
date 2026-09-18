@@ -14,8 +14,10 @@ import {
 } from './build-mobile-web-bundle.mjs'
 import {
   collectMobileWebAppRoutes,
-  renderMobileWebAppRouteManifest
+  renderMobileWebAppRouteManifest,
+  routePathnameFromKey
 } from './mobile-web-app-route-manifest.mjs'
+import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
 
 const projectDir = fileURLToPath(new URL('../..', import.meta.url))
 const mobileDir = join(projectDir, 'mobile')
@@ -175,6 +177,25 @@ export async function bundleMobileWebApp({ appDir = defaultAppDir } = {}) {
   }
 }
 
+/**
+ * The declared page routes, checked against the tree that was actually bundled.
+ *
+ * A declaration naming a screen this bundle has no module for would reach a phone as a route the
+ * shell opens the page for and the page then paints as Unmatched. Failing the build is the only
+ * place that mismatch is visible to whoever wrote the declaration.
+ */
+export function resolveMobileWebPageRoutes(routeKeys, declared = MOBILE_WEB_PAGE_ROUTES) {
+  const bundled = new Set(routeKeys.map(routePathnameFromKey).filter((path) => path !== null))
+  for (const route of declared) {
+    if (!bundled.has(route.pathname)) {
+      throw new Error(
+        `[build-mobile-web-app-bundle] declared page route ${route.pathname} has no module in the bundle`
+      )
+    }
+  }
+  return declared.map((route) => ({ pathname: route.pathname, grants: [...route.grants] }))
+}
+
 export async function buildMobileWebAppBundle({ outDir = defaultOutDir } = {}) {
   const [desktopVersion, protocolWindow, { script, images, routeKeys }] = await Promise.all([
     readDesktopVersion(),
@@ -213,7 +234,8 @@ export async function buildMobileWebAppBundle({ outDir = defaultOutDir } = {}) {
     outDir,
     written: [indexAsset, scriptAsset, ...imageAssets],
     desktopVersion,
-    protocolWindow
+    protocolWindow,
+    routes: resolveMobileWebPageRoutes(routeKeys)
   })
   return { manifest, outDir, routeKeys }
 }

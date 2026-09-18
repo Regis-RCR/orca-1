@@ -31,22 +31,26 @@ type Harness = {
   client: FakeRpcClient
   posted: string[]
   diagnostics: BridgeHostDiagnostic[]
+  navigations: string[]
   frames: () => BridgeHostMessage[]
   last: () => BridgeHostMessage
 }
 
 const ROUTE = { pathname: '/h/host-a' }
+const PAGE_ROUTES = ['/h/[hostId]']
 
 function harness(
   options: {
     client?: FakeRpcClient
     post?: (json: string) => Promise<void>
     route?: BridgeInitRoute
+    onNavigate?: (href: string) => void
   } = {}
 ): Harness {
   const client = options.client ?? createFakeRpcClient()
   const posted: string[] = []
   const diagnostics: BridgeHostDiagnostic[] = []
+  const navigations: string[] = []
   const host = createBridgeHost({
     client,
     post: (json) => {
@@ -56,6 +60,8 @@ function harness(
     buildId: 'build-a',
     sessionId: 'session-a',
     route: options.route ?? ROUTE,
+    pageRoutes: PAGE_ROUTES,
+    onNavigate: options.onNavigate ?? ((href) => navigations.push(href)),
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic)
   })
   // Read back through the page's own reader: a frame the host sends that the page would refuse is
@@ -73,6 +79,7 @@ function harness(
     client,
     posted,
     diagnostics,
+    navigations,
     frames,
     last: () => {
       const all = frames()
@@ -90,7 +97,7 @@ function subscribeFrame(id: string, method = 'terminal.subscribe'): string {
 }
 
 describe('init and state', () => {
-  it('answers ready with the getters, the caps it enforces, and no native grant', () => {
+  it('answers ready with the getters, the caps it enforces, and the grants it honours', () => {
     const client = createFakeRpcClient({
       getState: () => 'reconnecting',
       getReconnectAttempt: () => 3,
@@ -117,9 +124,11 @@ describe('init and state', () => {
           maxPendingRequests: BRIDGE_MAX_PENDING_REQUESTS,
           maxSubscriptions: BRIDGE_MAX_SUBSCRIPTIONS
         },
-        native: []
+        // What the shell will do for the page, and what makes its `navigate` frame acceptable.
+        native: ['navigate']
       },
-      route: ROUTE
+      route: ROUTE,
+      pageRoutes: PAGE_ROUTES
     })
   })
 
@@ -129,6 +138,38 @@ describe('init and state', () => {
     bridge.host.receive(clientFrame({ type: 'ready' }))
     const init = bridge.last()
     expect(init.type === 'init' && init.route).toEqual(route)
+  })
+
+  it('opens the screen a page asks for, without routing it to the client', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(
+      clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-a/session/wt-1?name=a+b' })
+    )
+    expect(bridge.navigations).toEqual(['/h/host-a/session/wt-1?name=a+b'])
+    expect(bridge.client.requests).toEqual([])
+    // Nothing is owed to the page for a notify, so nothing is posted back either.
+    expect(bridge.frames().filter((frame) => frame.type === 'error')).toEqual([])
+  })
+
+  it('refuses a navigate frame that is not a path this app could open', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    for (const href of ['//evil.example/h', 'h/host-a', 'https://evil.example', '/h#top']) {
+      bridge.host.receive(clientFrame({ type: 'notify', name: 'navigate', href }))
+    }
+    expect(bridge.navigations).toEqual([])
+    expect(bridge.diagnostics).toEqual(
+      Array.from({ length: 4 }, () => ({ kind: 'refused', refusal: 'unrecognised-message' }))
+    )
+  })
+
+  it('serves no navigate to a page that has said goodbye', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(clientFrame({ type: 'close' }))
+    bridge.host.receive(clientFrame({ type: 'notify', name: 'navigate', href: '/h/host-a/tasks' }))
+    expect(bridge.navigations).toEqual([])
   })
 
   it('reports a client without the optional getters as null rather than omitting the field', () => {

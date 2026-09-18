@@ -31,6 +31,8 @@ export type BridgePortPair = {
   toPage: string[]
   diagnostics: BridgeRpcClientDiagnostic[]
   hostDiagnostics: BridgeHostDiagnostic[]
+  /** Every screen the page asked the shell to open, in order. */
+  navigations: string[]
   /** Runs both lanes until a full round moves nothing. */
   flush: () => Promise<void>
   /** Read back through the reader on the receiving side, so a frame this returns is one that lands. */
@@ -43,6 +45,7 @@ export type BridgePortPairOptions = {
   sessionId?: string
   buildId?: string
   route?: BridgeInitRoute
+  pageRoutes?: readonly string[]
 }
 
 type Lane = {
@@ -101,6 +104,7 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
   const rpc = options.rpc ?? createFakeRpcClient()
   const diagnostics: BridgeRpcClientDiagnostic[] = []
   const hostDiagnostics: BridgeHostDiagnostic[] = []
+  const navigations: string[] = []
   let receiveOnPage: ((json: string) => void) | null = null
 
   const toPage = createLane((json) => {
@@ -115,6 +119,8 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
     buildId: options.buildId ?? 'build-a',
     sessionId: options.sessionId ?? 'session-a',
     route: options.route ?? { pathname: '/h/host-a' },
+    pageRoutes: options.pageRoutes ?? ['/h/[hostId]'],
+    onNavigate: (href) => navigations.push(href),
     onDiagnostic: (diagnostic) => hostDiagnostics.push(diagnostic)
   })
   const toShell = createLane((json) => {
@@ -141,6 +147,7 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
     toPage: toPage.sent,
     diagnostics,
     hostDiagnostics,
+    navigations,
     async flush(): Promise<void> {
       for (let round = 0; round < 64; round += 1) {
         const moved = toShell.sent.length + toPage.sent.length

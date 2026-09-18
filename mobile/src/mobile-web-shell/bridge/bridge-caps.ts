@@ -40,6 +40,10 @@ export const BRIDGE_MAX_ROUTE_PATHNAME_CHARS = 1024
 export const BRIDGE_MAX_ROUTE_PARAMS = 32
 export const BRIDGE_MAX_ROUTE_PARAM_CHARS = 1024
 export const BRIDGE_ROUTE_PATHNAME_PATTERN = /^\/(?![/\\])[^?#\s]*$/
+/** A `navigate` target: the same rooted shape, with the query the screen was opened with. */
+export const BRIDGE_ROUTE_HREF_PATTERN = /^\/(?![/\\])[^#\s]*$/
+export const BRIDGE_MAX_ROUTE_HREF_CHARS = 2048
+export const BRIDGE_MAX_PAGE_ROUTES = 64
 
 /**
  * In-flight bounds. The RN host is authoritative for both; the page holds the same numbers only to

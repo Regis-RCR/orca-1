@@ -7,6 +7,8 @@ type ScreenDependencies = {
   retry: Mock
   reportShellFailure: Mock
   openUrl: Mock
+  push: Mock
+  pageRoutes: readonly string[]
   lifecycle: string[]
   state: MobileWebShellSessionState
 }
@@ -19,6 +21,8 @@ const dependencies = vi.hoisted((): ScreenDependencies => {
     retry: vi.fn(),
     reportShellFailure: vi.fn(),
     openUrl: vi.fn(),
+    push: vi.fn(),
+    pageRoutes: ['/h/[hostId]'],
     lifecycle: [],
     state: { kind: 'checking' }
   }
@@ -36,7 +40,10 @@ vi.mock('react-native', () => ({
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 8, left: 0, right: 0, top: 44 })
 }))
-vi.mock('expo-router', () => ({ router: { replace: vi.fn() } }))
+vi.mock('expo-router', () => ({
+  router: { replace: vi.fn() },
+  useRouter: () => ({ push: dependencies.push })
+}))
 // A component rather than a host string: the React key is what makes a retry a rebuilt WebView,
 // and a mount/unmount log is the only thing that can tell a remount from a prop update.
 vi.mock('../../modules/orca-mobile-web-shell/src', async () => {
@@ -61,12 +68,18 @@ vi.mock('../transport/client-context', () => ({ useHostClient: () => ({ client: 
 vi.mock('./use-mobile-web-shell-session', () => ({
   useMobileWebShellSession: () => ({
     state: dependencies.state,
+    pageRoutes: dependencies.pageRoutes,
     retry: dependencies.retry,
     reportShellFailure: dependencies.reportShellFailure
   })
 }))
 
 import { MobileWebShellScreen } from './MobileWebShellScreen'
+
+/** The caller's native screen, as a component so `findAllByType` can name it without a host string. */
+function NativeFallback(): null {
+  return null
+}
 
 const BUILD_ID = 'a1b2c3d4e5f6'.repeat(5) + 'abcd'
 const DIRECTORY = '/var/mobile/Containers/Data/Caches/mobile-web/deadbeef/generations/a1b2'
@@ -76,7 +89,11 @@ async function render(state: MobileWebShellSessionState): Promise<ReactTestRende
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   await act(async () => {
     rendered.tree = create(
-      createElement(MobileWebShellScreen, { hostId: 'host-1', route: { pathname: '/h/host-1' } })
+      createElement(MobileWebShellScreen, {
+        hostId: 'host-1',
+        route: { pathname: '/h/host-1' },
+        fallback: createElement(NativeFallback)
+      })
     )
   })
   if (rendered.tree === null) {
@@ -100,7 +117,11 @@ async function update(tree: ReactTestRenderer, state: MobileWebShellSessionState
   dependencies.state = state
   await act(async () => {
     tree.update(
-      createElement(MobileWebShellScreen, { hostId: 'host-1', route: { pathname: '/h/host-1' } })
+      createElement(MobileWebShellScreen, {
+        hostId: 'host-1',
+        route: { pathname: '/h/host-1' },
+        fallback: createElement(NativeFallback)
+      })
     )
   })
 }
@@ -248,5 +269,14 @@ describe('the hybrid shell screen', () => {
     expect(text).not.toContain(BUILD_ID)
     expect(text).not.toContain(DIRECTORY)
     expect(text).not.toContain('host-1')
+  })
+})
+
+describe('the route the shell was not asked to render', () => {
+  it('hands the screen back to the caller rather than painting anything of its own', async () => {
+    const tree = await render({ kind: 'native-route' })
+    expect(tree.root.findAllByType(NativeFallback)).toHaveLength(1)
+    expect(byName(tree, 'ShellViewProbe')).toEqual([])
+    expect(byName(tree, 'ActivityIndicator')).toEqual([])
   })
 })

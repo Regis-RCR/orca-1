@@ -1,6 +1,6 @@
 import type { BrowserScreencastFrame } from '../../transport/browser-screencast-protocol'
 import type { RpcClient, SendRequestOptions } from '../../transport/rpc-client'
-import type { ConnectionState, ForegroundNudgeReason, RpcResponse } from '../../transport/types'
+import type { ConnectionState, RpcResponse } from '../../transport/types'
 import {
   BRIDGE_MAX_PENDING_REQUESTS,
   BRIDGE_MAX_SUBSCRIPTIONS,
@@ -17,6 +17,7 @@ import {
   BridgeSendFailedError,
   BridgeShellReplacedError
 } from './bridge-client-errors'
+import { createBridgeClientNotifications } from './bridge-client-notifications'
 import { BridgeClientRequests } from './bridge-client-requests'
 import {
   BridgeClientSubscriptions,
@@ -66,6 +67,12 @@ export type BridgeRpcClient = RpcClient & {
   /** Fires once `init` has landed, immediately if it already has. Mount no screen before it. */
   onReady: (listener: () => void) => () => void
   getShellSession: () => BridgeShellSession | null
+  /**
+   * Asks the shell to open a screen this page does not render. False when the shell granted no
+   * `navigate`, which is an older shell that would refuse the frame outright: the caller then has
+   * to do something else, and a thrown error in a tap handler is not that.
+   */
+  notifyNavigate: (href: string) => boolean
 }
 
 /**
@@ -321,23 +328,17 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
   const unsubscribeFromMessages = options.onMessage(receive)
   handshake.start()
 
+  const notifications = createBridgeClientNotifications({
+    send: sendFrame,
+    requireSession,
+    isClosed: () => closed,
+    hasGrant: (name) => session?.grants.native.includes(name) === true
+  })
+
   return {
     sendRequest,
     subscribe,
-    updateTerminalSubscriptionViewport: (terminal, viewport) => {
-      requireSession()
-      if (closed) {
-        return
-      }
-      sendFrame({
-        v: BRIDGE_PROTOCOL_VERSION,
-        type: 'notify',
-        name: 'terminalViewport',
-        terminal,
-        cols: viewport.cols,
-        rows: viewport.rows
-      })
-    },
+    updateTerminalSubscriptionViewport: notifications.updateTerminalSubscriptionViewport,
     getState: (): ConnectionState => snapshot().state,
     getReconnectAttempt: () => snapshot().reconnectAttempt,
     getLastConnectedAt: () => snapshot().lastConnectedAt,
@@ -349,18 +350,8 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     // Not gated on the session: it registers a listener and reads nothing, so it cannot answer
     // wrongly, and a provider that subscribes before `init` is how a screen hears the first change.
     onStateChange: (listener) => cache.onStateChange(listener),
-    notifyForeground: (reason?: ForegroundNudgeReason) => {
-      requireSession()
-      if (closed) {
-        return
-      }
-      sendFrame({
-        v: BRIDGE_PROTOCOL_VERSION,
-        type: 'notify',
-        name: 'foreground',
-        ...(reason === undefined ? {} : { reason })
-      })
-    },
+    notifyForeground: notifications.notifyForeground,
+    notifyNavigate: notifications.notifyNavigate,
     close,
     onReady: (listener) => {
       if (session !== null) {
