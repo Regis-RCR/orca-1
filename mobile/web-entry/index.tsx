@@ -20,6 +20,9 @@ import routeContext from './route-manifest'
 
 // The route tree starts at app/h, below the native root layout that owns the provider, so the
 // page supplies it here through ExpoRoot's own wrapper rather than mounting the native shell.
+// No suspense boundary: expo-router wraps every screen in its own, which is what catches the
+// route chunks the manifest defers. A chunk that never arrives is a rejection rather than a wait,
+// and that is the boundary below's, not suspense's.
 // A factory because the client is not in scope until `init` lands, and ExpoRoot takes a component.
 function createRootProviders(client: BridgeRpcClient, target: PageMountTarget) {
   return function RootProviders({ children }: PropsWithChildren) {
