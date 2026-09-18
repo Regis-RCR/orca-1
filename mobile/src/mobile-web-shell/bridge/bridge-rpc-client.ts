@@ -8,6 +8,7 @@ import {
   type BridgeRefusal
 } from './bridge-caps'
 import { BridgeConnectionCache } from './bridge-client-connection-cache'
+import { readShellSession, type BridgeShellSession } from './bridge-client-session'
 import { createBridgeInitHandshake } from './bridge-client-init-handshake'
 import {
   BridgeClientCapExceededError,
@@ -26,10 +27,11 @@ import {
   readBridgeHostMessage,
   type BridgeClientMessage,
   type BridgeConnectionSnapshot,
-  type BridgeGrants,
   type BridgeHostMessage
 } from './bridge-envelope'
 import { reconstructBridgeError } from './bridge-error-capture'
+
+export type { BridgeShellSession } from './bridge-client-session'
 
 export {
   BridgeClientCapExceededError,
@@ -52,13 +54,6 @@ export type BridgeRpcClientDiagnostic =
   | { kind: 'state-out-of-order' }
   | { kind: 'binary-frame-dropped' }
   | { kind: 'unknown-id' }
-
-/** What `init` said this page is attached to. `grants` is what a call site checks before it posts. */
-export type BridgeShellSession = {
-  sessionId: string
-  buildId: string
-  grants: BridgeGrants
-}
 
 export type BridgeRpcClientOptions = {
   /** Posts one frame to the shell. May throw; nothing about returning proves delivery. */
@@ -161,7 +156,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
       requests.closeAll(replaced)
       subscriptions.failAll(replaced.message)
     }
-    session = { sessionId: message.sessionId, buildId: message.buildId, grants: message.grants }
+    session = readShellSession(message)
     cache.prime(message.connection)
     for (const listener of readyListeners) {
       listener()

@@ -12,6 +12,9 @@ import {
   BRIDGE_MAX_MESSAGE_BYTES,
   BRIDGE_MAX_METHOD_CHARS,
   BRIDGE_MAX_REPLY_PARTS,
+  BRIDGE_MAX_ROUTE_PARAM_CHARS,
+  BRIDGE_MAX_ROUTE_PARAMS,
+  BRIDGE_MAX_ROUTE_PATHNAME_CHARS,
   BRIDGE_MAX_VIEWPORT_COLS,
   BRIDGE_MAX_VIEWPORT_ROWS
 } from './bridge-caps'
@@ -197,10 +200,33 @@ describe('client messages', () => {
 })
 
 describe('host messages', () => {
+  /** An otherwise valid `init`, so a refusal below is the route's and not the frame's. */
+  function initRoute(route: unknown): Record<string, unknown> {
+    return client({
+      type: 'init',
+      sessionId: 's1',
+      buildId: 'b1',
+      connection: CONNECTION,
+      grants: GRANTS,
+      route
+    })
+  }
+
   const accepted = [
     [
       'init',
       { type: 'init', sessionId: 's1', buildId: 'b1', connection: CONNECTION, grants: GRANTS }
+    ],
+    [
+      'an init naming the screen the page should open',
+      {
+        type: 'init',
+        sessionId: 's1',
+        buildId: 'b1',
+        connection: CONNECTION,
+        grants: GRANTS,
+        route: { pathname: '/h/host-a/session/wt-1', params: { name: 'a branch' } }
+      }
     ],
     ['state', { type: 'state', connection: CONNECTION }],
     ['a whole reply', { type: 'reply', id: ID, payload: SUCCESS_PAYLOAD }],
@@ -309,7 +335,40 @@ describe('host messages', () => {
     [
       'an end for a reason that is not one of the three',
       client({ type: 'end', id: ID, reason: 'done' })
-    ]
+    ],
+    // Every one of these reaches `history.replaceState`. A protocol-relative path makes it throw a
+    // cross-origin SecurityError and takes the mount down; the other three are a URL the page
+    // would have to parse to separate again, which is what `params` exists to avoid.
+    ['an init route that is not rooted', initRoute({ pathname: 'h/host-a' })],
+    ['an init route that is protocol-relative', initRoute({ pathname: '//evil.example/h' })],
+    ['an init route that is backslash-relative', initRoute({ pathname: '/\\evil.example/h' })],
+    ['an init route carrying its own query', initRoute({ pathname: '/h/a?name=b' })],
+    ['an init route carrying a fragment', initRoute({ pathname: '/h/a#top' })],
+    ['an init route with an empty pathname', initRoute({ pathname: '' })],
+    [
+      'an init route over the pathname cap',
+      initRoute({ pathname: `/${'h'.repeat(BRIDGE_MAX_ROUTE_PATHNAME_CHARS)}` })
+    ],
+    [
+      'an init route with more params than the cap',
+      initRoute({
+        pathname: '/h/a',
+        params: Object.fromEntries(
+          Array.from({ length: BRIDGE_MAX_ROUTE_PARAMS + 1 }, (_value, index) => [
+            `k${String(index)}`,
+            'v'
+          ])
+        )
+      })
+    ],
+    [
+      'an init route with a param value over the cap',
+      initRoute({
+        pathname: '/h/a',
+        params: { name: 'v'.repeat(BRIDGE_MAX_ROUTE_PARAM_CHARS + 1) }
+      })
+    ],
+    ['an init route whose param is not a string', initRoute({ pathname: '/h/a', params: { n: 1 } })]
   ] as const
 
   for (const [name, message] of refused) {

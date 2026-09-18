@@ -4,6 +4,7 @@ import type {
   OrcaMobileWebShellViewHandle
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
+import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
@@ -81,6 +82,8 @@ export type MobileWebShellBridgeView = {
 export function useMobileWebShellBridge(args: {
   hostId: string
   session: MobileWebShellSessionState
+  /** The screen the page is standing in for, which the document's own `/` cannot tell it. */
+  route: BridgeInitRoute
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -88,6 +91,11 @@ export function useMobileWebShellBridge(args: {
   const buildId = ready?.buildId ?? null
   const viewRef = useRef<MountedView | null>(null)
   const hostRef = useRef<MountedHost | null>(null)
+  // Fixed for the life of one host: the page routes once, before its first render, so a route that
+  // changed afterwards would have nothing left to change. Held in a ref for that reason — an inline
+  // object in the deps would rebuild the host on every render and settle its pendings each time.
+  const routeRef = useRef(args.route)
+  routeRef.current = args.route
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -99,6 +107,7 @@ export function useMobileWebShellBridge(args: {
       client,
       buildId,
       sessionId,
+      route: routeRef.current,
       post: (json) => {
         const mounted = viewRef.current
         return mounted === null || mounted.sessionId !== sessionId

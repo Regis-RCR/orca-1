@@ -7,6 +7,7 @@ import {
 } from '../../modules/orca-mobile-web-shell/src'
 import { ProtocolBlockScreen } from '../components/ProtocolBlockScreen'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import type {
   MobileWebShellFailureCause,
   MobileWebShellSessionState
@@ -111,6 +112,8 @@ function DevFacts({ state }: { state: Extract<MobileWebShellSessionState, { kind
 
 export type MobileWebShellScreenProps = {
   hostId: string
+  /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
+  route: BridgeInitRoute
   runtime?: MobileWebShellRuntime
 }
 
@@ -121,10 +124,10 @@ export type MobileWebShellScreenProps = {
  * The native view is keyed on the session id, so a remount the reducer asks for is a new key and a
  * rebuilt WebView with every fence reinstalled — the view has no reload of its own by design.
  */
-export function MobileWebShellScreen({ hostId, runtime }: MobileWebShellScreenProps) {
+export function MobileWebShellScreen({ hostId, route, runtime }: MobileWebShellScreenProps) {
   const insets = useSafeAreaInsets()
   const { state, retry, reportShellFailure } = useMobileWebShellSession({ hostId, runtime })
-  const bridge = useMobileWebShellBridge({ hostId, session: state })
+  const bridge = useMobileWebShellBridge({ hostId, route, session: state })
 
   if (state.kind === 'wall') {
     return <ProtocolBlockScreen verdict={state.verdict} />

@@ -43,7 +43,9 @@ export default function MobileWebShellRoute() {
   if (!enabled || !hostId) {
     return <Redirect href={`/h/${hostId ?? ''}`} />
   }
-  return <MobileWebShellScreen hostId={hostId} />
+  // The screen the page stands in for. The document is served at `/`, which matches no route in
+  // the tree the page carries, so this is the only thing that tells it which one to open.
+  return <MobileWebShellScreen hostId={hostId} route={{ pathname: `/h/${hostId}` }} />
 }
 
 const styles = StyleSheet.create({

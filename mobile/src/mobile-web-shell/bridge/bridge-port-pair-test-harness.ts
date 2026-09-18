@@ -4,7 +4,8 @@ import {
   readBridgeClientMessage,
   readBridgeHostMessage,
   type BridgeClientMessage,
-  type BridgeHostMessage
+  type BridgeHostMessage,
+  type BridgeInitRoute
 } from './bridge-envelope'
 import {
   createBridgeRpcClient,
@@ -41,6 +42,7 @@ export type BridgePortPairOptions = {
   rpc?: FakeRpcClient
   sessionId?: string
   buildId?: string
+  route?: BridgeInitRoute
 }
 
 type Lane = {
@@ -112,6 +114,7 @@ export function createBridgePortPair(options: BridgePortPairOptions = {}): Bridg
     },
     buildId: options.buildId ?? 'build-a',
     sessionId: options.sessionId ?? 'session-a',
+    route: options.route ?? { pathname: '/h/host-a' },
     onDiagnostic: (diagnostic) => hostDiagnostics.push(diagnostic)
   })
   const toShell = createLane((json) => {

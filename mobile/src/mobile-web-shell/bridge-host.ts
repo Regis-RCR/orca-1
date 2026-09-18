@@ -12,7 +12,8 @@ import {
   readBridgeClientMessage,
   type BridgeClientMessage,
   type BridgeConnectionSnapshot,
-  type BridgeHostMessage
+  type BridgeHostMessage,
+  type BridgeInitRoute
 } from './bridge/bridge-envelope'
 import { captureBridgeError } from './bridge/bridge-error-capture'
 import { splitBridgeReply } from './bridge/bridge-reply-chunking'
@@ -48,6 +49,12 @@ export type BridgeHostOptions = {
   post: (json: string) => Promise<void>
   buildId: string
   sessionId: string
+  /**
+   * Which screen the page should open. Required of a caller in this build and optional on the wire:
+   * an older shell sends no route at all, and the page has a state for that which nothing here can
+   * reach.
+   */
+  route: BridgeInitRoute
   onDiagnostic?: (diagnostic: BridgeHostDiagnostic) => void
 }
 
@@ -86,7 +93,7 @@ class BridgeReplyUndeliverableError extends Error {
  * page is told about in `init` are enforced here and not trusted from there.
  */
 export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
-  const { client, buildId, sessionId } = options
+  const { client, buildId, sessionId, route } = options
   const pending = new Map<string, PendingRequest>()
   let closed = false
   // Requests the client is still running. `pending` is the page's view and empties on a cancel or a
@@ -169,7 +176,8 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         },
         // Every native capability is out of C0. A name added here is never a version bump.
         native: []
-      }
+      },
+      route
     })
   }
 

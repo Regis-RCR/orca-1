@@ -16,7 +16,11 @@ import {
   BRIDGE_MAX_REPLY_BYTES,
   BRIDGE_MAX_SUBSCRIPTIONS
 } from './bridge/bridge-caps'
-import { readBridgeHostMessage, type BridgeHostMessage } from './bridge/bridge-envelope'
+import {
+  readBridgeHostMessage,
+  type BridgeHostMessage,
+  type BridgeInitRoute
+} from './bridge/bridge-envelope'
 import { BridgeReplyAssembler } from './bridge/bridge-reply-chunking'
 
 const ID = bridgeId(1)
@@ -31,8 +35,14 @@ type Harness = {
   last: () => BridgeHostMessage
 }
 
+const ROUTE = { pathname: '/h/host-a' }
+
 function harness(
-  options: { client?: FakeRpcClient; post?: (json: string) => Promise<void> } = {}
+  options: {
+    client?: FakeRpcClient
+    post?: (json: string) => Promise<void>
+    route?: BridgeInitRoute
+  } = {}
 ): Harness {
   const client = options.client ?? createFakeRpcClient()
   const posted: string[] = []
@@ -45,6 +55,7 @@ function harness(
     },
     buildId: 'build-a',
     sessionId: 'session-a',
+    route: options.route ?? ROUTE,
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic)
   })
   // Read back through the page's own reader: a frame the host sends that the page would refuse is
@@ -107,8 +118,17 @@ describe('init and state', () => {
           maxSubscriptions: BRIDGE_MAX_SUBSCRIPTIONS
         },
         native: []
-      }
+      },
+      route: ROUTE
     })
+  })
+
+  it('names the screen the page is standing in for, which its own `/` cannot tell it', () => {
+    const route = { pathname: '/h/host-a/session/wt-1', params: { name: 'a branch' } }
+    const bridge = harness({ route })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    const init = bridge.last()
+    expect(init.type === 'init' && init.route).toEqual(route)
   })
 
   it('reports a client without the optional getters as null rather than omitting the field', () => {

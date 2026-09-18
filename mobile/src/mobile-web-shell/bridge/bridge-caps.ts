@@ -29,6 +29,19 @@ export const BRIDGE_MAX_NODES = 20_000
 export const BRIDGE_MAX_METHOD_CHARS = 64
 
 /**
+ * The initial route bounds.
+ *
+ * The page writes this path into its own history before it renders, so it is held to what a path
+ * may be rather than to what a screen may want: rooted, single-slash, and carrying neither a query
+ * nor a fragment, because the params are a field of their own. A protocol-relative `//host` would
+ * make `replaceState` throw a cross-origin `SecurityError` and take the mount down with it.
+ */
+export const BRIDGE_MAX_ROUTE_PATHNAME_CHARS = 1024
+export const BRIDGE_MAX_ROUTE_PARAMS = 32
+export const BRIDGE_MAX_ROUTE_PARAM_CHARS = 1024
+export const BRIDGE_ROUTE_PATHNAME_PATTERN = /^\/(?![/\\])[^?#\s]*$/
+
+/**
  * In-flight bounds. The RN host is authoritative for both; the page holds the same numbers only to
  * refuse at the call site instead of after a round trip.
  */
