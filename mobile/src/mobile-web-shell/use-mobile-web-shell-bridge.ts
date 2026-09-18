@@ -5,6 +5,7 @@ import type {
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
 import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
+import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
 class BridgeViewGoneError extends Error {
@@ -81,6 +82,8 @@ export type MobileWebShellBridgeView = {
 export function useMobileWebShellBridge(args: {
   hostId: string
   session: MobileWebShellSessionState
+  /** The page could not render the generation on screen. Reported, never recovered from here. */
+  onPageFault: (error: BridgeErrorCapture) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -88,6 +91,10 @@ export function useMobileWebShellBridge(args: {
   const buildId = ready?.buildId ?? null
   const viewRef = useRef<MountedView | null>(null)
   const hostRef = useRef<MountedHost | null>(null)
+  // Read through a ref: the host is built once per session, and a caller's fresh closure every
+  // render must not tear one down and settle its pendings.
+  const pageFaultRef = useRef(args.onPageFault)
+  pageFaultRef.current = args.onPageFault
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
   // the handler is fenced on, so only handing the host over here keeps it off the retired client.
@@ -99,6 +106,9 @@ export function useMobileWebShellBridge(args: {
       client,
       buildId,
       sessionId,
+      onPageFault: (error) => {
+        pageFaultRef.current(error)
+      },
       post: (json) => {
         const mounted = viewRef.current
         return mounted === null || mounted.sessionId !== sessionId

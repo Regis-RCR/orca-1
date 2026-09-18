@@ -22,6 +22,7 @@ import {
   type BridgeStreamEndReason
 } from './bridge-client-subscriptions'
 import {
+  BRIDGE_FAULT_GRANT,
   BRIDGE_PROTOCOL_VERSION,
   readBridgeHostMessage,
   type BridgeClientMessage,
@@ -29,7 +30,7 @@ import {
   type BridgeGrants,
   type BridgeHostMessage
 } from './bridge-envelope'
-import { reconstructBridgeError } from './bridge-error-capture'
+import { captureBridgeError, reconstructBridgeError } from './bridge-error-capture'
 
 export {
   BridgeClientCapExceededError,
@@ -71,6 +72,15 @@ export type BridgeRpcClient = RpcClient & {
   /** Fires once `init` has landed, immediately if it already has. Mount no screen before it. */
   onReady: (listener: () => void) => () => void
   getShellSession: () => BridgeShellSession | null
+  /**
+   * Tells the shell this page cannot render what it was opened for. Never throws and never rejects:
+   * the one caller is an error boundary, and a report that threw would be the second failure.
+   *
+   * False means nothing left — no session, a closed client, a shell that granted no fault
+   * reporting, or a port that refused the frame. There is no second attempt: what could not be said
+   * once will not say itself on a retry, and the shell's own load state is the other way it finds out.
+   */
+  notifyPageFault: (error: unknown) => boolean
 }
 
 /**
@@ -367,6 +377,19 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
       })
     },
     close,
+    notifyPageFault: (error: unknown) => {
+      // Read rather than required: `requireSession` throws, and this is called from a `componentDidCatch`
+      // where a throw replaces the page's one report with an error nobody catches.
+      if (session === null || closed || !session.grants.native.includes(BRIDGE_FAULT_GRANT)) {
+        return false
+      }
+      return sendFrame({
+        v: BRIDGE_PROTOCOL_VERSION,
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: captureBridgeError(error)
+      })
+    },
     onReady: (listener) => {
       if (session !== null) {
         listener()
