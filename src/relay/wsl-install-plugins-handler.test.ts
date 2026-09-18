@@ -42,6 +42,24 @@ describe.skipIf(process.platform === 'win32')('createInstallPluginsHandler (gues
     })
   })
 
+  it('writes the OpenCode 2 plugin to its separate overlay', () => {
+    withHome((home) => {
+      const install = createInstallPluginsHandler(new PluginOverlayManager({ homeDir: home }), {
+        HOME: home,
+        ORCA_WSL_HOOK_INSTANCE: 'inst-v2'
+      } as NodeJS.ProcessEnv)
+      const source = '// opencode2\n'
+      const res = install({ opencode2PluginSource: source })
+      const dir = res.overlayDirs.opencode2
+      expect(res.installed.opencode2).toBe(true)
+      expect(typeof dir).toBe('string')
+      expect(readFileSync(join(dir as string, 'plugins', 'orca-opencode2-status.js'), 'utf8')).toBe(
+        source
+      )
+      expect(res.overlayDirs.opencode).toBeUndefined()
+    })
+  })
+
   it('reuses the overlay on repeat installs instead of rebuilding it', () => {
     withHome((home) => {
       const install = createInstallPluginsHandler(new PluginOverlayManager({ homeDir: home }), {

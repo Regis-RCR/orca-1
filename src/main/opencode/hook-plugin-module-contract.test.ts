@@ -72,13 +72,13 @@ describe('OpenCode status plugin module contract', () => {
     rmSync(tempDir, { recursive: true, force: true })
   })
 
-  async function loadPluginModule(): Promise<PluginModule> {
+  async function loadPluginModule(source = _internals.getOpenCodePluginSource()): Promise<PluginModule> {
     // Why: a unique basename per load defeats the ESM module cache between cases.
     const pluginPath = join(
       tempDir,
       `orca-opencode-status-${Math.random().toString(36).slice(2)}.mjs`
     )
-    writeFileSync(pluginPath, _internals.getOpenCodePluginSource())
+    writeFileSync(pluginPath, source)
     return (await import(pathToFileURL(pluginPath).href)) as PluginModule
   }
 
@@ -150,5 +150,94 @@ describe('OpenCode status plugin module contract', () => {
       paneKey: 'tab-1:leaf-1',
       payload: { hook_event_name: 'SessionBusy' }
     })
+  })
+
+  it('maps OpenCode 2 permission.v2 events to the existing permission card contract', async () => {
+    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    const posts: { body: Record<string, unknown> }[] = []
+    globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
+      posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
+      return { ok: true } as Response
+    }) as unknown as typeof globalThis.fetch
+
+    const module = await loadPluginModule(_internals.getOpenCode2PluginSource())
+    const hooks = await module.default?.server?.({
+      client: { session: { get: async () => ({ data: { id: 'ses_root' } }) } }
+    })
+    await hooks?.event({
+      event: {
+        type: 'permission.v2.asked',
+        properties: {
+          id: 'perm-1',
+          sessionID: 'ses_root',
+          action: 'bash',
+          resources: ['git status']
+        }
+      }
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const hookEvents = posts.map((post) =>
+      typeof post.body.payload === 'object' && post.body.payload !== null
+        ? (post.body.payload as { hook_event_name?: unknown }).hook_event_name
+        : undefined
+    )
+    expect(hookEvents).toContain('PermissionRequest')
+    expect(posts.find((post) => {
+      const payload = post.body.payload
+      return typeof payload === 'object' && payload !== null &&
+        (payload as { hook_event_name?: unknown }).hook_event_name === 'PermissionRequest'
+    })?.body).toMatchObject({
+      payload: {
+        permission: 'bash',
+        patterns: ['git status']
+      }
+    })
+  })
+
+  it('forwards admitted prompts and completed streamed text once', async () => {
+    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
+    const posts: { body: Record<string, unknown> }[] = []
+    globalThis.fetch = vi.fn(async (_input: unknown, init?: { body?: unknown }) => {
+      posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
+      return { ok: true } as Response
+    }) as unknown as typeof globalThis.fetch
+
+    const module = await loadPluginModule(_internals.getOpenCode2PluginSource())
+    const hooks = await module.default?.server?.({
+      client: { session: { get: async () => ({ data: { id: 'ses_root' } }) } }
+    })
+    await hooks?.event({
+      event: {
+        type: 'session.next.prompt.admitted',
+        properties: {
+          sessionID: 'ses_root',
+          messageID: 'msg-user',
+          prompt: { text: 'Inspect the repository' }
+        }
+      }
+    })
+    await hooks?.event({
+      event: {
+        type: 'session.next.text.ended',
+        properties: {
+          sessionID: 'ses_root',
+          assistantMessageID: 'msg-assistant',
+          textID: 'text-1',
+          text: 'The repository is ready.'
+        }
+      }
+    })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    const messageBodies = posts
+      .map((post) => post.body.payload)
+      .filter((payload): payload is Record<string, unknown> =>
+        typeof payload === 'object' && payload !== null && 'role' in payload
+      )
+    expect(messageBodies).toEqual([
+      expect.objectContaining({ role: 'user', text: 'Inspect the repository' }),
+      expect.objectContaining({ role: 'assistant', text: 'The repository is ready.' })
+    ])
   })
 })

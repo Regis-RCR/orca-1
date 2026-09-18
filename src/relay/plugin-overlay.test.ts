@@ -43,6 +43,17 @@ describe('PluginOverlayManager', () => {
     expect(readFileSync(expected, 'utf8')).toBe('export const X = 1')
   })
 
+  it('keeps the OpenCode 2 plugin in a separate overlay and filename', () => {
+    manager.setSources({ opencode2PluginSource: 'export const V2 = 1' })
+    expect(manager.hasOpenCodeSource('opencode2')).toBe(true)
+    const dir = manager.materializeOpenCode('tab-2:0', undefined, 'opencode2')
+    expect(dir).not.toBeNull()
+    expect(readFileSync(join(dir!, 'plugins', 'orca-opencode2-status.js'), 'utf8')).toBe(
+      'export const V2 = 1'
+    )
+    expect(existsSync(join(dir!, 'plugins', 'orca-opencode-status.js'))).toBe(false)
+  })
+
   it('mirrors a preexisting remote OpenCode config dir before adding Orca plugin', () => {
     const userConfigDir = join(homeDir, 'company-opencode')
     mkdirSync(join(userConfigDir, 'plugins'), { recursive: true })

@@ -16,7 +16,7 @@ type GuestPluginInstallDeps = {
  *  with `unavailable` (no handler / teardown): only `none` means the previously
  *  recorded dir is now unusable and must stop being advertised to PTYs. */
 export type GuestOverlayResult =
-  | { kind: 'dir'; dir: string }
+  | { kind: 'dir'; dir?: string; dir2?: string }
   | { kind: 'none' }
   | { kind: 'unavailable' }
 
@@ -27,10 +27,15 @@ export async function requestGuestOpenCodeOverlayDir(
 ): Promise<GuestOverlayResult> {
   try {
     const res = (await mux.request(AGENT_HOOK_INSTALL_PLUGINS_METHOD, deps.pluginSources())) as {
-      overlayDirs?: { opencode?: unknown }
+      overlayDirs?: { opencode?: unknown; opencode2?: unknown }
     }
     const dir = res?.overlayDirs?.opencode
-    return typeof dir === 'string' && dir.length > 0 ? { kind: 'dir', dir } : { kind: 'none' }
+    const dir2 = res?.overlayDirs?.opencode2
+    const opencodeDir = typeof dir === 'string' && dir.length > 0 ? dir : undefined
+    const opencode2Dir = typeof dir2 === 'string' && dir2.length > 0 ? dir2 : undefined
+    return opencodeDir || opencode2Dir
+      ? { kind: 'dir', ...(opencodeDir ? { dir: opencodeDir } : {}), ...(opencode2Dir ? { dir2: opencode2Dir } : {}) }
+      : { kind: 'none' }
   } catch (err) {
     // Why: -32601 = older guest bundle without the handler; CONNECTION_LOST/DISPOSED = routine mid-flight teardown — swallow both.
     const code = (err as { code?: unknown })?.code
