@@ -69,3 +69,9 @@ ELECTRON_RUN_AS_NODE=1 ORCA_BACKGROUND_LAUNCH=1 node_modules/electron/dist/Elect
 Other platforms should use their installed Electron executable with the same environment and arguments. No package installation is needed.
 
 Existing tail-window readers are not substitutes: they omit old ancestors, conflicts, or global append-order evidence. The similarly named `claude-tui-exit.ts` leaf reader finds a tail marker without establishing this full graph proof.
+
+## Follow-up: finish already-appended proof repairs internally
+
+The published initial-window version `ff8411085a4b588ca313672a53957c1d7e9a7aa5` is the version measured by the artifacts above. The current reader now retries one enlarged finite prefix on the same descriptor when the first prefix is missing a marker/cursor or ends in a partial record, and a second descriptor stat proves that bytes were appended. A complete valid original prefix still returns immediately; a malformed/conflicting/session/order failure is never retried. The refreshed prefix undergoes the entire existing proof again.
+
+This avoids making a caller wait and re-open merely to see bytes that already arrived. An unfinished repair remains the existing incomplete-tail result after one refresh; continually growing incomplete sources can still require a caller retry. The reader does not wait for a producer, chase an unlimited stream, infer growth from a path replacement, or weaken the proof. Regression cases cover all three missing-prefix shapes, completed partial records, invalid repairs, retry bounds, successful unchanged prefixes, and descriptor closure. The original standalone artifact scripts are historical and require their pinned source revision.

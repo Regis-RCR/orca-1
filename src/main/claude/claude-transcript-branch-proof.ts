@@ -251,32 +251,41 @@ export async function proveClaudeTranscriptBranch(
 ): Promise<ClaudeTranscriptBranchProof> {
   const handle = await open(input.transcriptPath, 'r')
   try {
-    // Bound this observation to the opened file's initial prefix.
-    const stats = await handle.stat()
-    const proof = createBranchProof(input)
-    let index = 0
-    if (stats.size > 0) {
-      const stream = handle.createReadStream({ start: 0, end: stats.size - 1, autoClose: false })
-      for await (const record of splitTranscriptStreamLines(stream)) {
-        proof.add(record.line, index++, record.terminated)
-      }
-    }
-    try {
-      return proof.finish()
-    } catch (error) {
-      if (
-        error instanceof ClaudeTranscriptMarkerMissingError ||
-        error instanceof ClaudeTranscriptPreviousCursorMissingError
-      ) {
-        const grew = await handle.stat().then(
-          (current) => current.size > stats.size,
-          () => false
-        )
-        if (grew) {
+    let size = (await handle.stat()).size
+    let refreshed = false
+    while (true) {
+      const proof = createBranchProof(input)
+      let index = 0
+      try {
+        if (size > 0) {
+          const stream = handle.createReadStream({ start: 0, end: size - 1, autoClose: false })
+          for await (const record of splitTranscriptStreamLines(stream)) {
+            proof.add(record.line, index++, record.terminated)
+          }
+        }
+        return proof.finish()
+      } catch (error) {
+        if (
+          !(error instanceof ClaudeTranscriptMarkerMissingError) &&
+          !(error instanceof ClaudeTranscriptPreviousCursorMissingError) &&
+          !(error instanceof ClaudeTranscriptTailIncompleteError)
+        ) {
+          throw error
+        }
+        if (refreshed) {
           throw new ClaudeTranscriptTailIncompleteError()
         }
+        const nextSize = await handle.stat().then(
+          (current) => current.size,
+          () => size
+        )
+        if (nextSize <= size) {
+          throw error
+        }
+        // Finish an already-appended repair without making the caller retry.
+        size = nextSize
+        refreshed = true
       }
-      throw error
     }
   } finally {
     await handle.close()

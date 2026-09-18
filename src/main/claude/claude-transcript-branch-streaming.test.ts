@@ -171,12 +171,12 @@ it.each([
   ['missing marker', ROOT, marker('root'), null],
   ['missing previous cursor', SOURCE, CHILD + marker('child'), 'child']
 ] as const)(
-  'marks a growing %s prefix incomplete without accepting appended proof',
+  'finishes a growing %s proof on the same open handle',
   async (_name, contents, growth, previous) => {
     await writeFile(state.path, contents)
     state.afterStat = () => appendFile(state.path, growth)
-    await expect(read(previous)).rejects.toBeInstanceOf(ClaudeTranscriptTailIncompleteError)
     expect((await read(previous)).leafUuid).toBe(previous ?? 'root')
+    expect(state.opens).toBe(1)
   }
 )
 
@@ -241,4 +241,27 @@ it.each(['stat', 'read'] as const)('awaits closure after a %s failure', async (f
   state.statErrorOn = failure === 'stat' ? 1 : 0
   state.readError = failure === 'read'
   await expect(read()).rejects.toThrow(`Injected ${failure} failure`)
+})
+
+it('completes a record appended after the first observed extent without caller retry', async () => {
+  const contents = ROOT + marker('root').slice(0, -5)
+  await writeFile(state.path, contents)
+  state.afterStat = () => appendFile(state.path, marker('root').slice(-5))
+  expect((await read()).leafUuid).toBe('root')
+  expect(state.opens).toBe(1)
+})
+
+it('validates the entire refreshed prefix instead of accepting a malformed repair', async () => {
+  await writeFile(state.path, ROOT)
+  state.afterStat = () => appendFile(state.path, row('root', 'foreign') + marker('root'))
+  await expect(read()).rejects.toThrow('conflicting ancestry')
+  expect(state.opens).toBe(1)
+})
+
+it('keeps an unfinished growing repair retryable after one internal refresh', async () => {
+  await writeFile(state.path, ROOT)
+  state.afterStat = () => appendFile(state.path, ROOT)
+  await expect(read()).rejects.toBeInstanceOf(ClaudeTranscriptTailIncompleteError)
+  expect(state.opens).toBe(1)
+  expect(state.bytesRead).toBe(Buffer.byteLength(ROOT) * 3)
 })
