@@ -59,6 +59,11 @@ export function getTerminalLinkActionSearchKeywords(platform: BrowserShortcutPla
       'auto.components.settings.browser.search.terminalLinkActions.disable',
       'disable'
     ),
+    'link click behavior',
+    'open directly',
+    'modifier-click only',
+    'middle click',
+    'mouse 3',
     platform.isMac ? 'cmd' : 'ctrl'
   ]
 }
