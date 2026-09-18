@@ -75,6 +75,15 @@ export type BridgeRpcClient = RpcClient & {
   notifyNavigate: (href: string) => boolean
   /** Writes one allowlisted key into the app's store. False when the shell granted no `storage`. */
   notifyStorageWrite: (key: string, value: string | null) => boolean
+  /**
+   * Tells the shell this page cannot render what it was opened for. Never throws and never rejects:
+   * the one caller is an error boundary, and a report that threw would be the second failure.
+   *
+   * False means nothing left — no session, a closed client, a shell that granted no fault
+   * reporting, or a port that refused the frame. There is no second attempt: what could not be said
+   * once will not say itself on a retry, and the shell's own load state is the other way it finds out.
+   */
+  notifyPageFault: (error: unknown) => boolean
 }
 
 /**
@@ -327,15 +336,15 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     unsubscribeFromMessages()
   }
 
-  const unsubscribeFromMessages = options.onMessage(receive)
-  handshake.start()
-
   const notifications = createBridgeClientNotifications({
     send: sendFrame,
     requireSession,
     isClosed: () => closed,
     hasGrant: (name) => session?.grants.native.includes(name) === true
   })
+
+  const unsubscribeFromMessages = options.onMessage(receive)
+  handshake.start()
 
   return {
     sendRequest,
@@ -355,6 +364,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     notifyForeground: notifications.notifyForeground,
     notifyNavigate: notifications.notifyNavigate,
     notifyStorageWrite: notifications.notifyStorageWrite,
+    notifyPageFault: notifications.notifyPageFault,
     close,
     onReady: (listener) => {
       if (session !== null) {

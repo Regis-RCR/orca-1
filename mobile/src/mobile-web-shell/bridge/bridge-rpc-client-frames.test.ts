@@ -12,6 +12,7 @@ import {
   BRIDGE_ACK_INTERVAL_FRAMES
 } from './bridge-client-subscriptions'
 import {
+  BRIDGE_FAULT_GRANT,
   BRIDGE_PROTOCOL_VERSION,
   readBridgeClientMessage,
   type BridgeClientMessage,
@@ -37,13 +38,15 @@ const CONNECTION = {
   generation: 5
 } as const
 
+const GRANTS = { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
+
 const INIT: BridgeHostMessage = {
   v: BRIDGE_PROTOCOL_VERSION,
   type: 'init',
   sessionId: 'session-a',
   buildId: 'build-a',
   connection: CONNECTION,
-  grants: { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
+  grants: GRANTS
 }
 
 type PageClientOptions = {
@@ -312,6 +315,53 @@ describe('bridge client before a session', () => {
     })
     expect(() => page.client.getState()).toThrow(BridgeClientNotReadyError)
     expect(page.diagnostics).toEqual([])
+  })
+})
+
+describe('bridge client page faults', () => {
+  /** A shell that says it will act on a fault, which is the only kind the page posts one to. */
+  function startGranted(page: ReturnType<typeof createPageClient>): void {
+    page.deliver({ ...INIT, grants: { ...GRANTS, native: [BRIDGE_FAULT_GRANT] } })
+  }
+
+  it('posts the captured error once the shell has granted fault reporting', () => {
+    const page = createPageClient()
+    startGranted(page)
+    expect(page.client.notifyPageFault(new Error('the route threw'))).toBe(true)
+    expect(page.frames().at(-1)).toEqual({
+      v: BRIDGE_PROTOCOL_VERSION,
+      type: 'notify',
+      name: BRIDGE_FAULT_GRANT,
+      error: { category: 'Error', message: 'the route threw', isRpcDeliveryUnknown: false }
+    })
+  })
+
+  it('stays quiet against a shell that granted nothing, because the frame would be refused whole', () => {
+    const page = createPageClient()
+    page.start()
+    expect(page.client.notifyPageFault(new Error('the route threw'))).toBe(false)
+    expect(page.sent).toHaveLength(1)
+  })
+
+  it('answers false before a session and after close rather than throwing at a boundary', () => {
+    const early = createPageClient()
+    expect(early.client.notifyPageFault(new Error('too soon'))).toBe(false)
+    const page = createPageClient()
+    startGranted(page)
+    page.client.close()
+    expect(page.client.notifyPageFault(new Error('too late'))).toBe(false)
+    expect(page.frames().at(-1)).toEqual({ v: BRIDGE_PROTOCOL_VERSION, type: 'close' })
+  })
+
+  it('answers false for a port that refused the frame, and reports it once', () => {
+    const page = createPageClient({
+      send: () => {
+        throw new Error('the channel is gone')
+      }
+    })
+    startGranted(page)
+    expect(page.client.notifyPageFault(new Error('the route threw'))).toBe(false)
+    expect(page.diagnostics.map((diagnostic) => diagnostic.kind)).toContain('send-failed')
   })
 })
 

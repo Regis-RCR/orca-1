@@ -3,19 +3,13 @@ import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import type { RpcResponse } from '../transport/types'
 import { BRIDGE_MAX_PENDING_REQUESTS } from './bridge/bridge-caps'
 import type { BridgeClientMessage } from './bridge/bridge-envelope'
+import { BridgeHostDisposedError } from './bridge-host-errors'
 
 type RequestMessage = Extract<BridgeClientMessage, { type: 'request' }>
 
 /** Live until something settles it; the flag is what keeps a cancelled request's late answer from
  *  being posted under an id the page has moved on from. */
 type PendingRequest = { live: boolean }
-
-export class BridgeHostDisposedError extends Error {
-  constructor() {
-    super('the page bridge was torn down before this request answered')
-    this.name = 'BridgeHostDisposedError'
-  }
-}
 
 export type BridgeHostRequestDeps = {
   client: RpcClient

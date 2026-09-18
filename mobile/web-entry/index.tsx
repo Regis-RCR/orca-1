@@ -11,6 +11,7 @@ import {
   type PageMountTarget
 } from '../src/mobile-web-shell/bridge/page-bootstrap'
 import { publishPageStorage } from '../src/mobile-web-shell/bridge/page-async-storage'
+import { PageFaultBoundary } from '../src/mobile-web-shell/bridge/page-fault-boundary'
 import { publishPageHostProfile } from '../src/mobile-web-shell/bridge/page-host-profile'
 // Named with its extension: this entry is the web build's and the provider it needs is the web
 // sibling's, which takes the page's client. The screens below still import `./client-context`
@@ -21,6 +22,9 @@ import routeContext from './route-manifest'
 
 // The route tree starts at app/h, below the native root layout that owns the provider, so the
 // page supplies it here through ExpoRoot's own wrapper rather than mounting the native shell.
+// No suspense boundary: expo-router wraps every screen in its own, which is what catches the
+// route chunks the manifest defers. A chunk that never arrives is a rejection rather than a wait,
+// and that is the boundary below's, not suspense's.
 // A factory because the client is not in scope until `init` lands, and ExpoRoot takes a component.
 function createRootProviders(client: BridgeRpcClient, target: PageMountTarget) {
   return function RootProviders({ children }: PropsWithChildren) {
@@ -76,14 +80,23 @@ bootstrapShellPage({
     publishPageHostProfile(session.host)
     publishPageStorage(session.storage, (key, value) => client.notifyStorageWrite(key, value))
     createRoot(container).render(
-      <ExpoRoot
-        context={routeContext}
-        // The same URL the line above just wrote, handed over rather than left to be read: ExpoRoot
-        // snapshots `window.location.href` when its module is imported, which is before any frame
-        // has crossed the bridge, so what it captured on its own is the `/` the shell serves.
-        location={new URL(window.location.href)}
-        wrapper={createRootProviders(client, target)}
-      />
+      // Above `ExpoRoot`, not inside its wrapper: a route this bundle cannot resolve or import
+      // throws where the router renders it, and a boundary below the router never sees that.
+      <PageFaultBoundary
+        onFault={(error) => {
+          client.notifyPageFault(error)
+        }}
+      >
+        <ExpoRoot
+          context={routeContext}
+          // The same URL the line above just wrote, handed over rather than left to be read:
+          // ExpoRoot snapshots `window.location.href` when its module is imported, which is before
+          // any frame has crossed the bridge, so what it captured on its own is the `/` the shell
+          // serves.
+          location={new URL(window.location.href)}
+          wrapper={createRootProviders(client, target)}
+        />
+      </PageFaultBoundary>
     )
   },
   refuseUnroutedShell: () => {

@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import type { FakeRpcClient } from './bridge-host-test-fakes'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 
 type ScreenDependencies = {
@@ -11,6 +12,8 @@ type ScreenDependencies = {
   pageRoutes: readonly string[]
   lifecycle: string[]
   state: MobileWebShellSessionState
+  /** Null for every case but the bridge's: with no client the hook builds no host at all. */
+  client: FakeRpcClient | null
 }
 
 const dependencies = vi.hoisted((): ScreenDependencies => {
@@ -24,7 +27,8 @@ const dependencies = vi.hoisted((): ScreenDependencies => {
     push: vi.fn(),
     pageRoutes: ['/h/[hostId]'],
     lifecycle: [],
-    state: { kind: 'checking' }
+    state: { kind: 'checking' },
+    client: null
   }
 })
 
@@ -64,7 +68,9 @@ vi.mock('../../modules/orca-mobile-web-shell/src', async () => {
 })
 // The real bridge hook runs, so the props it owns are the ones the view is handed here; only the
 // client lookup is stubbed, because reaching it imports the Expo runtime this test does not have.
-vi.mock('../transport/client-context', () => ({ useHostClient: () => ({ client: null }) }))
+vi.mock('../transport/client-context', () => ({
+  useHostClient: () => ({ client: dependencies.client })
+}))
 // Reaching the real one imports the host store and expo-secure-store, whose module touches an Expo
 // global this test does not have. What it answers is the screen's input, not its behaviour.
 vi.mock('./use-page-host-snapshot', () => ({
@@ -83,6 +89,8 @@ vi.mock('./use-mobile-web-shell-session', () => ({
   })
 }))
 
+import { clientFrame, createFakeRpcClient } from './bridge-host-test-fakes'
+import { BRIDGE_FAULT_GRANT } from './bridge/bridge-envelope'
 import { MobileWebShellScreen } from './MobileWebShellScreen'
 
 /** The caller's native screen, as a component so `findAllByType` can name it without a host string. */
@@ -152,6 +160,7 @@ describe('the hybrid shell screen', () => {
     dependencies.retry.mockReset()
     dependencies.reportShellFailure.mockReset()
     dependencies.lifecycle.length = 0
+    dependencies.client = null
   })
 
   it('renders the update wall for a bundle verdict, with no shell view', async () => {
@@ -267,6 +276,29 @@ describe('the hybrid shell screen', () => {
       view.props.onLoadState({ nativeEvent: { state: 'failed', reason: 'render-process-gone' } })
     })
     expect(dependencies.reportShellFailure.mock.calls).toEqual([['render-process-gone']])
+  })
+
+  it('fails the session on a page fault, so a blank page becomes the failure screen', async () => {
+    dependencies.client = createFakeRpcClient()
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const tree = await render(readyState('session-one'))
+    await act(async () => {
+      byName(tree, 'ShellViewProbe')[0].props.onBridgeMessage({
+        nativeEvent: {
+          json: clientFrame({
+            type: 'notify',
+            name: BRIDGE_FAULT_GRANT,
+            error: { category: 'Error', message: 'the route threw', isRpcDeliveryUnknown: false }
+          })
+        }
+      })
+    })
+    expect(dependencies.reportShellFailure.mock.calls).toEqual([['document-load-failed']])
+    warned.mockRestore()
+    // The reducer's answer to that reason, rendered: this is what the page's blank turns into.
+    expect(
+      textOf(await render({ kind: 'failed', reason: 'document-load-failed', retriedOnce: true }))
+    ).toContain('The downloaded workspace could not be opened.')
   })
 
   it('shows a build id prefix and never the whole one, the cache path, or the host id', async () => {

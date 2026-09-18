@@ -149,6 +149,16 @@ export const BridgeInitStorageSchema = z
   )
   .refine((entries) => Object.keys(entries).length <= PAGE_STORAGE_MAX_ENTRIES)
 
+/**
+ * The one grant negotiated for the protocol itself rather than for a screen: the shell saying it
+ * will act on a `fault` report.
+ *
+ * It exists because `notify` is a closed list on both sides. A page served by a newer desktop into
+ * an older shell that posted an unknown name would have the whole frame refused as
+ * `unrecognised-message`, so the page asks first and stays quiet when the answer is no.
+ */
+export const BRIDGE_FAULT_GRANT = 'fault'
+
 /** Pinned against `SendRequestOptions` in this module's test. */
 export const BridgeSendRequestOptionsSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
@@ -272,6 +282,14 @@ const BridgeClientMessageSchema = z.discriminatedUnion('type', [
       terminal: z.string().min(1),
       cols: z.number().int().min(1).max(BRIDGE_MAX_VIEWPORT_COLS),
       rows: z.number().int().min(1).max(BRIDGE_MAX_VIEWPORT_ROWS)
+    }),
+    z.object({
+      v: versionSchema,
+      type: z.literal('notify'),
+      name: z.literal(BRIDGE_FAULT_GRANT),
+      /** The capture an `error` frame already carries, so both directions share one bound and one
+       *  reader. Nothing is owed back: the page is telling the shell, not asking it. */
+      error: BridgeErrorCaptureSchema
     })
   ]),
   z.object({ v: versionSchema, type: z.literal('close') })

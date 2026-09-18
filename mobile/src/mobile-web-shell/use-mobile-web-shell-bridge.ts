@@ -6,6 +6,7 @@ import type {
 import { useHostClient } from '../transport/client-context'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import { createBridgeHost, type BridgeHost, type BridgeHostDiagnostic } from './bridge-host'
+import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import type { PageHostSnapshot } from './use-page-host-snapshot'
 
@@ -97,6 +98,8 @@ export function useMobileWebShellBridge(args: {
    */
   snapshot: PageHostSnapshot | null
   onStorageWrite: (key: string, value: string | null) => void
+  /** The page could not render the generation on screen. Reported, never recovered from here. */
+  onPageFault: (error: BridgeErrorCapture) => void
 }): MobileWebShellBridgeView {
   const { client } = useHostClient(args.hostId)
   const ready = args.session.kind === 'ready' ? args.session : null
@@ -117,6 +120,8 @@ export function useMobileWebShellBridge(args: {
   navigateRef.current = args.onNavigate
   const storageWriteRef = useRef(args.onStorageWrite)
   storageWriteRef.current = args.onStorageWrite
+  const pageFaultRef = useRef(args.onPageFault)
+  pageFaultRef.current = args.onPageFault
   const snapshot = args.snapshot
 
   // Commit-phase, not passive: a native frame that arrives between the two carries the session id
@@ -131,6 +136,9 @@ export function useMobileWebShellBridge(args: {
       sessionId,
       route: routeRef.current,
       pageRoutes: pageRoutesRef.current,
+      onPageFault: (error) => {
+        pageFaultRef.current(error)
+      },
       onNavigate: (href) => {
         navigateRef.current(href)
       },
