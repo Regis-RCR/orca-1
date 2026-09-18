@@ -113,11 +113,14 @@ export class ScriptedRpcTransport {
       sendRequest: (...args: Parameters<RpcClient['sendRequest']>) => {
         // Taken here rather than above the wrapper so `session()` still reads exactly one name per
         // physical send: a wrapper that forwards on a microtask arrives after the next logical call
-        // has been made, and one slot would hand both sends the second name. Underflow throws
-        // rather than reusing a name, because a wrapper that drops a send is a finding.
-        const name = this.names.shift()
-        if (name === undefined) {
-          throw new Error('A physical send arrived with no logical request to name it')
+        // has been made, and one slot would hand both sends the second name. Both ways of getting
+        // that wrong throw rather than guess: a wrapper that invents a send finds the queue empty,
+        // and one that swallows a send leaves a name whose method is not the one now on the wire.
+        const name = this.names.shift() ?? '(no logical request)'
+        if (name.slice(0, name.lastIndexOf('#')) !== args[0]) {
+          throw new Error(
+            `A physical send of ${args[0]} cannot take the name ${name}: the wrapper dropped, reordered or invented a send`
+          )
         }
         this.activeName = name
         return this.logical.sendRequest(...args)
