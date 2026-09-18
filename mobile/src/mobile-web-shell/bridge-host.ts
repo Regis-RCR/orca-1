@@ -1,6 +1,11 @@
 import type { RpcClient } from '../transport/rpc-client'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import type { ConnectionState, RpcResponse } from '../transport/types'
+import {
+  BridgeCapExceededError,
+  BridgeHostDisposedError,
+  BridgeReplyUndeliverableError
+} from './bridge-host-errors'
 import { BridgeHostSubscriptions } from './bridge-host-subscriptions'
 import {
   BRIDGE_MAX_PENDING_REQUESTS,
@@ -61,27 +66,6 @@ export type BridgeHostOptions = {
 export type BridgeHost = {
   receive: (json: string) => void
   dispose: () => void
-}
-
-class BridgeHostDisposedError extends Error {
-  constructor() {
-    super('the page bridge was torn down before this request answered')
-    this.name = 'BridgeHostDisposedError'
-  }
-}
-
-class BridgeCapExceededError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'BridgeCapExceededError'
-  }
-}
-
-class BridgeReplyUndeliverableError extends Error {
-  constructor(refusal: BridgeRefusal) {
-    super(`the reply could not be delivered to the page (${refusal})`)
-    this.name = 'BridgeReplyUndeliverableError'
-  }
 }
 
 /**

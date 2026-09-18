@@ -1,6 +1,6 @@
 import type { BrowserScreencastFrame } from '../../transport/browser-screencast-protocol'
 import type { RpcClient, SendRequestOptions } from '../../transport/rpc-client'
-import type { ConnectionState, ForegroundNudgeReason, RpcResponse } from '../../transport/types'
+import type { ConnectionState, RpcResponse } from '../../transport/types'
 import {
   BRIDGE_MAX_PENDING_REQUESTS,
   BRIDGE_MAX_SUBSCRIPTIONS,
@@ -16,13 +16,13 @@ import {
   BridgeSendFailedError,
   BridgeShellReplacedError
 } from './bridge-client-errors'
+import { createBridgeClientNotifications } from './bridge-client-notifications'
 import { BridgeClientRequests } from './bridge-client-requests'
 import {
   BridgeClientSubscriptions,
   type BridgeStreamEndReason
 } from './bridge-client-subscriptions'
 import {
-  BRIDGE_FAULT_GRANT,
   BRIDGE_PROTOCOL_VERSION,
   readBridgeHostMessage,
   type BridgeClientMessage,
@@ -30,7 +30,7 @@ import {
   type BridgeGrants,
   type BridgeHostMessage
 } from './bridge-envelope'
-import { captureBridgeError, reconstructBridgeError } from './bridge-error-capture'
+import { reconstructBridgeError } from './bridge-error-capture'
 
 export {
   BridgeClientCapExceededError,
@@ -333,26 +333,20 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     unsubscribeFromMessages()
   }
 
+  const notifications = createBridgeClientNotifications({
+    send: sendFrame,
+    requireSession,
+    isClosed: () => closed,
+    hasGrant: (grant) => session?.grants.native.includes(grant) ?? false
+  })
+
   const unsubscribeFromMessages = options.onMessage(receive)
   handshake.start()
 
   return {
     sendRequest,
     subscribe,
-    updateTerminalSubscriptionViewport: (terminal, viewport) => {
-      requireSession()
-      if (closed) {
-        return
-      }
-      sendFrame({
-        v: BRIDGE_PROTOCOL_VERSION,
-        type: 'notify',
-        name: 'terminalViewport',
-        terminal,
-        cols: viewport.cols,
-        rows: viewport.rows
-      })
-    },
+    ...notifications,
     getState: (): ConnectionState => snapshot().state,
     getReconnectAttempt: () => snapshot().reconnectAttempt,
     getLastConnectedAt: () => snapshot().lastConnectedAt,
@@ -364,32 +358,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     // Not gated on the session: it registers a listener and reads nothing, so it cannot answer
     // wrongly, and a provider that subscribes before `init` is how a screen hears the first change.
     onStateChange: (listener) => cache.onStateChange(listener),
-    notifyForeground: (reason?: ForegroundNudgeReason) => {
-      requireSession()
-      if (closed) {
-        return
-      }
-      sendFrame({
-        v: BRIDGE_PROTOCOL_VERSION,
-        type: 'notify',
-        name: 'foreground',
-        ...(reason === undefined ? {} : { reason })
-      })
-    },
     close,
-    notifyPageFault: (error: unknown) => {
-      // Read rather than required: `requireSession` throws, and this is called from a `componentDidCatch`
-      // where a throw replaces the page's one report with an error nobody catches.
-      if (session === null || closed || !session.grants.native.includes(BRIDGE_FAULT_GRANT)) {
-        return false
-      }
-      return sendFrame({
-        v: BRIDGE_PROTOCOL_VERSION,
-        type: 'notify',
-        name: BRIDGE_FAULT_GRANT,
-        error: captureBridgeError(error)
-      })
-    },
     onReady: (listener) => {
       if (session !== null) {
         listener()

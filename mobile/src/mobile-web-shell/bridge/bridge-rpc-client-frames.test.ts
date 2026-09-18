@@ -38,13 +38,15 @@ const CONNECTION = {
   generation: 5
 } as const
 
+const GRANTS = { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
+
 const INIT: BridgeHostMessage = {
   v: BRIDGE_PROTOCOL_VERSION,
   type: 'init',
   sessionId: 'session-a',
   buildId: 'build-a',
   connection: CONNECTION,
-  grants: { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
+  grants: GRANTS
 }
 
 type PageClientOptions = {
@@ -283,7 +285,7 @@ describe('bridge client before a session', () => {
 describe('bridge client page faults', () => {
   /** A shell that says it will act on a fault, which is the only kind the page posts one to. */
   function startGranted(page: ReturnType<typeof createPageClient>): void {
-    page.deliver({ ...INIT, grants: { ...INIT.grants, native: [BRIDGE_FAULT_GRANT] } })
+    page.deliver({ ...INIT, grants: { ...GRANTS, native: [BRIDGE_FAULT_GRANT] } })
   }
 
   it('posts the captured error once the shell has granted fault reporting', () => {
