@@ -36,6 +36,7 @@ import type { DaemonRespawnReason } from './daemon-pty-runtime-state'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import { isDaemonRestartInFlight } from './daemon-restart-state'
 import { DaemonSpawner, getDaemonPidPath } from './daemon-spawner'
+import { LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS } from '../startup/first-window-startup-services'
 
 // Why: daemon init runs concurrent with window load, so an in-process t timestamp (not harness stderr timing) measures cold-start.
 function logDaemonMilestone(event: string, details: Record<string, unknown> = {}): void {
@@ -51,6 +52,11 @@ export async function initDaemonPtyProvider(
   signal?: AbortSignal,
   options: { macosLoginSessionWatch?: boolean } = {}
 ): Promise<void> {
+  // Why: anchors the legacy registry-build deadline below to the SAME 60s fail-open
+  // cutoff the caller's signal aborts on (first-window-startup-services.ts). Captured
+  // here rather than at the call site so a flat per-call budget can never stack on top
+  // of however much of that window ensureRunning() below already spent.
+  const daemonInitStartedAtMs = Date.now()
   logDaemonMilestone('daemon-init-start')
   // Why: e2e coverage for the startup PTY gate (#5232) needs a daemon init that deterministically outlasts the first-window timeout.
   const e2eInitDelayMs = Number(process.env.ORCA_E2E_DAEMON_INIT_DELAY_MS)
@@ -123,7 +129,11 @@ export async function initDaemonPtyProvider(
     releaseDaemonAdoptionLease(newSpawner.getHandle())
 
     ;({ adapters: legacyAdapters, registry: legacyGenerationRegistry } =
-      await createLegacyDaemonAdapters(runtimeDir))
+      await createLegacyDaemonAdapters(
+        runtimeDir,
+        undefined,
+        daemonInitStartedAtMs + LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS
+      ))
     routedAdapter =
       launchMode === 'degraded-new-pty-fallback'
         ? new DegradedDaemonPtyProvider({

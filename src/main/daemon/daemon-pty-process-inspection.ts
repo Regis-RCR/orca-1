@@ -24,7 +24,32 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
       // idle), never an accuracy claim about the generation's real state.
       return true
     }
-    return this.hasChildProcessesFromForeground(await this.getForegroundProcess(id, opts))
+    try {
+      return this.hasChildProcessesFromForeground(await this.requestForegroundProcess(id, opts))
+    } catch {
+      // Why: getForegroundProcess() below swallows this same failure into null, and
+      // hasChildProcessesFromForeground(null) reads a null foreground as idle -- composing
+      // through the swallowing getter would silently turn a failed or deadline-expired read
+      // into busy:false, exactly the unsafe outcome the SAFE DEFAULT above rules out. Stay
+      // conservative-true here instead, calling the client directly so this failure path
+      // never collapses into the getter's own null-on-error contract.
+      return true
+    }
+  }
+
+  // Why: the raw RPC, shared by hasChildProcesses (which must tell a failed/deadline-expired
+  // read apart from a genuinely null foreground) and getForegroundProcess (whose own contract
+  // swallows the same failure into null for its other callers, unchanged below).
+  private async requestForegroundProcess(
+    id: string,
+    opts?: { deadlineMs?: number }
+  ): Promise<string | null> {
+    const result = await this.client.request<{ foregroundProcess: string | null }>(
+      'getForegroundProcess',
+      { sessionId: id },
+      remainingDaemonRequestTimeoutMs(opts?.deadlineMs)
+    )
+    return result.foregroundProcess
   }
 
   async inspectProcess(
@@ -65,12 +90,7 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
       return null
     }
     try {
-      const result = await this.client.request<{ foregroundProcess: string | null }>(
-        'getForegroundProcess',
-        { sessionId: id },
-        remainingDaemonRequestTimeoutMs(opts?.deadlineMs)
-      )
-      return result.foregroundProcess
+      return await this.requestForegroundProcess(id, opts)
     } catch {
       return null
     }
