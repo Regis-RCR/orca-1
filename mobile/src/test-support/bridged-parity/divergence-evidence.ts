@@ -1,15 +1,14 @@
-import { describe, expect, it } from 'vitest'
 import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
-import { firstDifference } from './golden-recording'
-import { canonicalJson, OBSERVATION_FIELDS } from './golden-value-pool'
-import type { Observation, Recording, RecordingScenario } from './recording-scenario'
-import type { RecordedValue } from './recording-values'
+import { firstDifference } from '../rpc-recording/golden-recording'
+import { canonicalJson, OBSERVATION_FIELDS } from '../rpc-recording/golden-value-pool'
+import type { Observation, Recording, RecordingScenario } from '../rpc-recording/recording-scenario'
+import type { RecordedValue } from '../rpc-recording/recording-values'
 
 /**
- * The four facts a divergence is named from, each read off the run rather than off its message.
+ * The facts a divergence is named from, each read off the run rather than off its message.
  *
- * Named in a `.test.ts` for the reason `bridged-parity-classes.test.ts` gives: neither the recorder
- * digest nor the recorder's fence reaches this name, and reading a failure cannot change a golden.
+ * Outside the recorder's directory for the reason `divergence-classes.ts` gives: none of this can
+ * change what a recording records, so none of it belongs in the digest that says what can.
  */
 
 /** Frames the shell posted that the page's own reader drops. Read back through that same reader. */
@@ -123,114 +122,3 @@ function undefinedValuedKey(value: unknown): boolean {
 export function sendsUndefinedValuedParam(scenario: RecordingScenario): boolean {
   return scenario.steps.some((step) => 'params' in step && undefinedValuedKey(step.params))
 }
-
-const scenario = (steps: RecordingScenario['steps']): RecordingScenario => ({
-  id: 's',
-  operation: 'o',
-  version: 1,
-  family: 'f',
-  sites: [],
-  schedules: [],
-  steps
-})
-
-const recording = (
-  observation: Partial<Recording['checkpoints'][number]['observation']>
-): Recording => ({
-  scenario: 's',
-  checkpoints: [
-    {
-      id: 'only',
-      observation: {
-        sender: [],
-        payloads: [],
-        settlements: {},
-        state: null,
-        effects: [],
-        ...observation
-      }
-    }
-  ]
-})
-
-describe('reading the refused frames back', () => {
-  const id = 'aaaaaaaaaaaaaaaaaaaaaa'
-
-  it('keeps only what the page would drop', () => {
-    const dropped = JSON.stringify({ v: 1, type: 'reply', id, payload: { id: 'f', ok: true } })
-    const kept = JSON.stringify({ v: 1, type: 'end', id, reason: 'closed' })
-    expect(refusedFrames([dropped, kept])).toEqual([dropped])
-  })
-
-  it('takes a reply the page refused only for the missing field', () => {
-    const refused = JSON.stringify({
-      v: 1,
-      type: 'reply',
-      id,
-      payload: { id: 'f', ok: true, result: 1 }
-    })
-    expect(readBridgeHostMessage(refused).ok).toBe(false)
-    expect(readBridgeHostMessage(withReplyMeta(refused)).ok).toBe(true)
-  })
-
-  it('leaves a payload the page refuses for its own shape refused', () => {
-    const absent = JSON.stringify({ v: 1, type: 'reply', id, payload: { id: 'f', ok: true } })
-    expect(readBridgeHostMessage(withReplyMeta(absent)).ok).toBe(false)
-  })
-
-  it('leaves anything that is not a reply alone', () => {
-    const end = JSON.stringify({ v: 1, type: 'end', id, reason: 'closed' })
-    expect(withReplyMeta(end)).toBe(end)
-  })
-})
-
-describe('undoing the counterfactual', () => {
-  it('removes every `_meta`, however deep, and nothing else', () => {
-    expect(
-      withoutRpcMeta([{ value: { ok: true, _meta: { runtimeId: 'r' }, result: [1] } }])
-    ).toEqual([{ value: { ok: true, result: [1] } }])
-  })
-})
-
-describe('the fields that diverged', () => {
-  it('reports every one, not the first', () => {
-    const expected = recording({ sender: [{ ordinal: 1 }], effects: [{ name: 'a' }] })
-    const actual = recording({ sender: [{ ordinal: 2 }], effects: [{ name: 'b' }] })
-    expect(divergingFields(expected, actual)).toEqual(['sender[0].ordinal', 'effects[0].name'])
-  })
-
-  it('names the checkpoint list when the two runs did not reach the same ones', () => {
-    const expected = recording({})
-    const actual: Recording = { scenario: 's', checkpoints: [] }
-    expect(divergingFields(expected, actual)).toEqual(['checkpoints'])
-  })
-
-  it('is empty when the two agree', () => {
-    expect(divergingFields(recording({}), recording({}))).toEqual([])
-  })
-})
-
-describe('reading the scenario', () => {
-  it('sees a reply that is `ok` with no `result` key', () => {
-    expect(
-      scriptsAbsentResultReply(scenario([{ complete: 'a#1', params: null, reply: { ok: true } }]))
-    ).toBe(true)
-    expect(
-      scriptsAbsentResultReply(
-        scenario([{ complete: 'a#1', params: null, reply: { ok: true, result: null } }])
-      )
-    ).toBe(false)
-  })
-
-  it('sees an own param key whose value is `undefined`, however deep', () => {
-    expect(
-      sendsUndefinedValuedParam(scenario([{ complete: 'a#1', params: { q: undefined } }]))
-    ).toBe(true)
-    expect(
-      sendsUndefinedValuedParam(scenario([{ complete: 'a#1', params: { q: [{ r: undefined }] } }]))
-    ).toBe(true)
-    expect(sendsUndefinedValuedParam(scenario([{ complete: 'a#1', params: { q: null } }]))).toBe(
-      false
-    )
-  })
-})

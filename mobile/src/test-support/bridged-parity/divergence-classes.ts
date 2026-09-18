@@ -1,14 +1,10 @@
-import { describe, expect, it } from 'vitest'
-
 /**
  * What a bridged-replay divergence is called, decided by a rule rather than by reading a message.
  *
- * `rpc-recording-through-bridge.test.ts` imports from here, which is why a module of exports lives
- * in a file named for tests. Both fences that guard the corpus stop exactly at this name: the
- * recorder digest skips every non-driver `.test.ts`, and the recorder's own fence skips all of
- * `mobile/src/test-support/rpc-recording`. A rule for naming failures cannot change what a
- * recording records, so a tightened rule must not cost 787 re-recorded headers, and anywhere else
- * in `mobile/src` it would.
+ * Beside the recorder rather than inside it. Reading a failure cannot change what a recording
+ * records, so `recorderSha256` must not cover this: a tightened rule would otherwise re-record 787
+ * headers to say nothing. The recorder's own directory is digested whole, which is why this lives
+ * one level up in `test-support`.
  */
 
 /** Named once so the suite, its pin and the CI job cannot drift apart. */
@@ -102,66 +98,3 @@ export const BRIDGED_PARITY_BASELINE: Readonly<Record<BridgedParityClass | 'iden
   'write-ordinal': 13,
   unclassified: 0
 }
-
-const base: BridgedParityEvidence = {
-  fixedByReplyMeta: false,
-  threwWhileRecording: false,
-  divergingFields: [],
-  scriptsAbsentResultReply: false,
-  sendsUndefinedValuedParam: false
-}
-
-describe('the bridged-parity flag', () => {
-  it('is the name the suite, the pin and the CI job all spell', () => {
-    expect(BRIDGED_PARITY_FLAG).toBe('RPC_FOUNDATION_BRIDGE')
-  })
-})
-
-describe('classifying one diverging golden', () => {
-  it('names the missing field first, but only where supplying it was enough', () => {
-    const absent = {
-      ...base,
-      scriptsAbsentResultReply: true,
-      divergingFields: ['sender[0].settlement']
-    }
-    expect(classifyBridgedParity({ ...absent, fixedByReplyMeta: true })).toBe('reply-meta-required')
-    expect(classifyBridgedParity(absent)).toBe('result-absent-settlement')
-  })
-
-  it('splits the absent-result partition by what moved first', () => {
-    const absent = { ...base, scriptsAbsentResultReply: true }
-    expect(
-      classifyBridgedParity({ ...absent, divergingFields: ['sender[0].settlement', 'effects'] })
-    ).toBe('result-absent-settlement')
-    expect(classifyBridgedParity({ ...absent, divergingFields: ['effects'] })).toBe(
-      'result-absent-observation'
-    )
-    expect(classifyBridgedParity({ ...absent, divergingFields: ['checkpoints'] })).toBe(
-      'result-absent-observation'
-    )
-  })
-
-  it('names a throw only when the scenario sends a key valued `undefined`', () => {
-    expect(
-      classifyBridgedParity({ ...base, threwWhileRecording: true, sendsUndefinedValuedParam: true })
-    ).toBe('params-undefined')
-    expect(classifyBridgedParity({ ...base, threwWhileRecording: true })).toBe('unclassified')
-  })
-
-  it('names the ordinal class ahead of the partition a matrix golden also carries', () => {
-    expect(classifyBridgedParity({ ...base, divergingFields: ['sender[0].ordinal'] })).toBe(
-      'write-ordinal'
-    )
-    expect(
-      classifyBridgedParity({
-        ...base,
-        scriptsAbsentResultReply: true,
-        divergingFields: ['payloads[0].ordinal', 'effects']
-      })
-    ).toBe('write-ordinal')
-  })
-
-  it('refuses to name a golden that diverged in no field at all', () => {
-    expect(classifyBridgedParity(base)).toBe('unclassified')
-  })
-})

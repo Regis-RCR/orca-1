@@ -16,6 +16,9 @@ import type { Rejection } from './recording-scenario'
 /** What a product stream listener threw on one delivered frame. */
 type FrameListenerCrash = { readonly error: unknown }
 
+/** Named once so the two layers of the seam spell the operation's own call the same way. */
+type SendRequestArgs = Parameters<RpcClient['sendRequest']>
+
 /**
  * Puts another transport between the operation being recorded and this one. The recorder's own
  * instrumentation stays underneath, so the wrapped client is a transport under test rather than a
@@ -110,7 +113,7 @@ export class ScriptedRpcTransport {
     // wrapper carries it, and the inside hands it to the logical client with its name attached.
     const inner = wrapClient({
       ...this.logical,
-      sendRequest: (...args: Parameters<RpcClient['sendRequest']>) => {
+      sendRequest: (...args: SendRequestArgs) => {
         // Taken here rather than above the wrapper so `session()` still reads exactly one name per
         // physical send: a wrapper that forwards on a microtask arrives after the next logical call
         // has been made, and one slot would hand both sends the second name. Both ways of getting
@@ -118,9 +121,7 @@ export class ScriptedRpcTransport {
         // and one that swallows a send leaves a name whose method is not the one now on the wire.
         const name = this.names.shift() ?? '(no logical request)'
         if (name.slice(0, name.lastIndexOf('#')) !== args[0]) {
-          throw new Error(
-            `A physical send of ${args[0]} cannot take the name ${name}: the wrapper dropped, reordered or invented a send`
-          )
+          throw new Error(`A physical send of ${args[0]} cannot take the name ${name}`)
         }
         this.activeName = name
         return this.logical.sendRequest(...args)
@@ -132,7 +133,7 @@ export class ScriptedRpcTransport {
       // physical payloads, and the operation makes it at the same moment either way; stamping it
       // under the wrapper would time the wrapper's forwarded send, an event the unwrapped recording
       // has no counterpart for, and every send would read one write late.
-      sendRequest: (...args: Parameters<RpcClient['sendRequest']>) => {
+      sendRequest: (...args: SendRequestArgs) => {
         const name = this.occurrence(args[0])
         this.names.push(name)
         const request = {

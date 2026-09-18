@@ -12,7 +12,7 @@ import {
   classifyBridgedParity,
   type BridgedParityClass,
   type BridgedParityEvidence
-} from './bridged-parity-classes.test'
+} from '../bridged-parity/divergence-classes'
 import {
   divergingFields,
   recordingWithoutRpcMeta,
@@ -20,7 +20,7 @@ import {
   scriptsAbsentResultReply,
   sendsUndefinedValuedParam,
   withReplyMeta
-} from './bridged-parity-evidence.test'
+} from '../bridged-parity/divergence-evidence'
 import { familyGoldens, pilotGoldens } from './derived-goldens'
 import { compareGolden, readGolden } from './golden-recording'
 import { pilotMountAdapters } from './pilot-mount-adapters'
