@@ -14,7 +14,11 @@ function createTerminal(options = {}) {
     ...options
   })
   terminal.loadAddon(addon)
-  return { terminal, addon, handler: addon._handlers.get('kitty') }
+  const handler = addon._handlers.get('kitty')
+  if (options.kittyStorageLimit !== undefined) {
+    handler._kittyStorage._storage.setLimit(options.kittyStorageLimit)
+  }
+  return { terminal, addon, handler }
 }
 
 function writeKitty(terminal, command, payload) {
@@ -60,8 +64,19 @@ describe('xterm image memory contract', () => {
     }
   })
 
+  it('rejects a decoder that cannot fit the storage budget before allocation', async () => {
+    const { terminal, handler } = createTerminal({ storageLimit: 8 })
+    try {
+      await writeKitty(terminal, 'a=t,f=32,s=1,v=1,i=9,m=1,q=2', 'AAAA')
+      expect(handler._pendingTransmissions.size).toBe(0)
+      expect(handler._aborted).toBe(true)
+    } finally {
+      terminal.dispose()
+    }
+  })
+
   it('evicts transmitted images by byte size before placement', async () => {
-    const { terminal, handler } = createTerminal({ storageLimit: 0.5 })
+    const { terminal, handler } = createTerminal({ storageLimit: 12, kittyStorageLimit: 0.5 })
     const payload = Buffer.alloc(200_000, 1).toString('base64')
     try {
       for (let id = 1; id <= 4; id++) {
@@ -83,7 +98,7 @@ describe('xterm image memory contract', () => {
   })
 
   it('evicts unplaced payloads before displayed ones', async () => {
-    const { terminal, handler } = createTerminal({ storageLimit: 0.5 })
+    const { terminal, handler } = createTerminal({ storageLimit: 12, kittyStorageLimit: 0.5 })
     const storage = handler._kittyStorage
     const payload = Buffer.alloc(200_000, 1).toString('base64')
     try {
@@ -102,7 +117,7 @@ describe('xterm image memory contract', () => {
   })
 
   it('stores an image larger than the byte budget rather than acking a dropped one', async () => {
-    const { terminal, handler } = createTerminal({ storageLimit: 0.5 })
+    const { terminal, handler } = createTerminal({ storageLimit: 12, kittyStorageLimit: 0.5 })
     const payload = Buffer.alloc(600_000, 1).toString('base64')
     try {
       await writeKitty(terminal, 'a=t,f=32,s=500,v=300,i=1,q=2', payload)
