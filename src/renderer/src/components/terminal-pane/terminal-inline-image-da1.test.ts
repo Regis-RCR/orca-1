@@ -14,6 +14,7 @@ describe('inline image DA1 ownership', () => {
       const { primeTerminalImageAddon } =
         await import('../../lib/pane-manager/terminal-image-addon-loader')
       const terminal = new Terminal({ allowProposedApi: true })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the pane members exercised by DA1 ownership.
       const pane = {
         id: 1,
         terminal,

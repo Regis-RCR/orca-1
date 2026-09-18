@@ -26,6 +26,7 @@ async function callRuntime<T>(
   method: string,
   params: unknown
 ): Promise<T> {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the browser bridge returns the generic RPC result as unknown.
   return client.page.evaluate(
     async ({ selector, method, params }) => {
       const response = await window.api.runtimeEnvironments.call({

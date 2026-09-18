@@ -64,6 +64,7 @@ export async function readInlineImageResources(
     return ids.map((id) => {
       const manager = window.__paneManagers?.get(id)
       const terminal = manager?.getActivePane()?.terminal
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: xterm private addon state is intentionally inspected by this proof helper.
       const internals = terminal as unknown as
         | { _addonManager: { _addons: { instance: Addon }[] } }
         | undefined

@@ -36,6 +36,7 @@ import {
 
 function makePane(id: number): ManagedPaneInternal {
   const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the pane members exercised by the addon lifecycle.
   return {
     id,
     terminal,
@@ -89,6 +90,7 @@ describe('pane inline images', () => {
   it('disposes the addon on detach', () => {
     const pane = makePane(4)
     attachInlineImages(pane)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked addon exposes this disposal marker.
     const addon = pane.imageAddon as unknown as { disposed: boolean }
     detachInlineImages(pane)
     expect(pane.imageAddon).toBeNull()
@@ -146,6 +148,7 @@ describe('pane inline images', () => {
   it('passes the perf-tuned options to the addon', () => {
     const pane = makePane(6)
     attachInlineImages(pane)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the installed addon exposes constructor options for this contract test.
     const options = (pane.imageAddon as unknown as { options: Record<string, unknown> }).options
     expect(options.enableSizeReports).toBe(false)
     expect(options.storageLimit).toBe(32)

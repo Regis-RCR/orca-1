@@ -30,7 +30,7 @@ export function buildLocalPtySpawnEnvironment(args: {
     // Why: supports-hyperlinks rejects TERM_PROGRAM=Orca, so tools drop OSC 8 links; force it since xterm.js parses them.
     FORCE_HYPERLINK: '1',
     [ORCA_IMAGE_PROTOCOL_ENV]: ORCA_IMAGE_PROTOCOL_VALUE
-  } as Record<string, string>
+  } satisfies Record<string, string>
   // Why: Orca can be launched from an Orca terminal; pane identity belongs to the child PTY, not the parent shell.
   removeUnspecifiedPaneIdentityEnv(spawnEnv, spawn.env)
   removeAppImageRuntimeEnv(spawnEnv)

@@ -14,6 +14,7 @@ describe('terminal inactive cursor style', () => {
       cols: 80,
       rows: 24
     } as unknown as ManagedPane['terminal']
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the pane members used by appearance logic.
     const pane = { id: 1, terminal } as ManagedPane
     const manager = {
       getPanes: () => [pane],
