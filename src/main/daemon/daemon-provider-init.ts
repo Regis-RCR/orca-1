@@ -4,6 +4,7 @@ import {
   hasSeededUnconfirmedClaudePtys
 } from '../claude-accounts/live-pty-gate'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from '../startup/startup-diagnostics'
+import { DaemonGenerationRetirementScheduler } from './daemon-generation-retirement'
 import { checkDaemonHealth } from './daemon-health'
 import { collectPinnedDaemonVersions, pruneOldDaemonHosts } from './daemon-host-relocation'
 import {
@@ -170,6 +171,17 @@ export async function initDaemonPtyProvider(
     throw error
   }
   installDaemonProvider(newSpawner, routedAdapter)
+  // Why here and not earlier: only a real DaemonPtyRouter (legacyAdapters.length > 0)
+  // has generations to retire -- a DegradedDaemonPtyProvider or the bare current
+  // adapter (no legacy) has nothing this scheduler acts on. Started after
+  // installDaemonProvider() so the very first tick observes the routed provider
+  // that IPC callers and the renderer already see, never a pre-install snapshot.
+  if (routedAdapter instanceof DaemonPtyRouter) {
+    new DaemonGenerationRetirementScheduler({
+      router: routedAdapter,
+      runtimeDir
+    }).start()
+  }
   // Why: the first window may register PTY listeners before daemon init finishes; rebind so daemon PTYs still fan out events.
   rebindLocalProviderListeners()
   logDaemonMilestone('daemon-init-done', {

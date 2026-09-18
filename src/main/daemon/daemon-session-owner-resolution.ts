@@ -35,11 +35,28 @@ export class DaemonSessionOwnerResolver<T extends IPtyProvider> {
   private readonly failedProviderCooldowns = new Map<T, number>()
   private readonly routeIncarnations = new Map<string, string | undefined>()
   private epoch = 0
+  // Why mutable, not the constructor array directly: a retired legacy generation
+  // (DaemonPtyRouter.retireLegacyAdapter) must stop being polled by inventory() --
+  // left in, its listProcesses() rejection permanently blocks `complete` from ever
+  // becoming true again, degrading every later ownership resolution to 'unknown'.
+  private providers: T[]
 
   constructor(
-    private readonly providers: readonly T[],
+    initialProviders: readonly T[],
     private readonly routes: Map<string, IPtyProvider>
-  ) {}
+  ) {
+    this.providers = [...initialProviders]
+  }
+
+  // Why: the counterpart to invalidateProvider -- that one clears cached state for a
+  // provider staying in the pool; this one removes it from the pool outright so
+  // inventory() never polls a disposed adapter again. A provider not in the pool is
+  // a harmless no-op: the filter below drops nothing and invalidateProvider clears
+  // no route, matching how every other method here treats an untracked provider.
+  removeProvider(provider: T): void {
+    this.providers = this.providers.filter((candidate) => candidate !== provider)
+    this.invalidateProvider(provider)
+  }
 
   invalidateProvider(provider: T): void {
     this.epoch += 1

@@ -35,6 +35,7 @@ export function createDaemonInitModuleFactories(state: DaemonInitMockState) {
     replaceDaemonPidFileMock,
     getDaemonCommandLineMock,
     unlinkOwnedDaemonPidFileMock,
+    unlinkOwnedDaemonTokenFileMock,
     daemonClientMock,
     spawnerInstances,
     ensureRunningOverrides,
@@ -220,7 +221,8 @@ export function createDaemonInitModuleFactories(state: DaemonInitMockState) {
         `/fake/daemon/daemon-v${version ?? PROTOCOL_VERSION}.pid`,
       serializeDaemonPidFile: (obj: unknown) => JSON.stringify(obj),
       replaceDaemonPidFile: replaceDaemonPidFileMock,
-      unlinkOwnedDaemonPidFile: unlinkOwnedDaemonPidFileMock
+      unlinkOwnedDaemonPidFile: unlinkOwnedDaemonPidFileMock,
+      unlinkOwnedDaemonTokenFile: unlinkOwnedDaemonTokenFileMock
     }),
     daemonPtyAdapter: () => ({
       DaemonPtyAdapter: MockDaemonPtyAdapter

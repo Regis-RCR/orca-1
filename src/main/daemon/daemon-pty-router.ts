@@ -10,6 +10,10 @@ import type {
 } from '../providers/types'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import { shouldHandoffDaemonHistory } from './daemon-history-handoff'
+import {
+  handoffIdleLegacySession,
+  retireLegacyAdapter
+} from './daemon-pty-router-generation-retirement'
 import type { DaemonLegacyGenerationRegistryEntry } from './daemon-legacy-adapters'
 import type { DaemonPtyRouterDataEvent, DaemonPtyRouterExitEvent } from './daemon-pty-router-events'
 import { DaemonSessionOwnerResolver } from './daemon-session-owner-resolution'
@@ -312,10 +316,19 @@ export class DaemonPtyRouter implements IPtyProvider {
 
   // Why: the Manage Sessions panel iterates all adapters to list sessions
   // across every protocol version, and the restart handler needs to preserve
-  // surviving legacy adapters across the current-adapter swap. On this branch
-  // (pre-#1323) the legacy list is set once at construction and never mutated,
-  // so returning the internal array by reference is safe for the intended
-  // read-only use.
+  // surviving legacy adapters across the current-adapter swap. `legacy` is no
+  // longer immutable after construction: retireLegacyAdapter() below shrinks it
+  // once its verification pass proves a generation owns zero remaining sessions
+  // (design doc section 6, "legacy array mutability" -- a deliberate, reviewed
+  // invariant change, not a drive-by edit). A caller holding this reference across
+  // an await must therefore re-read it rather than assume its length is stable;
+  // `pty:management:listSessions`/`killAll`/`killOne` (src/main/ipc/pty-management.ts)
+  // already re-fetch it on every call and tolerate the shrink, EXCEPT `killAll`'s
+  // own bounded poll loop, which snapshots `getAllAdapters()` once up front and can
+  // still hold a since-retired, since-disposed adapter for the rest of that one
+  // poll window -- harmless there only because retirement never fires on a
+  // generation `killAll` would still find live sessions on, but flagged rather
+  // than silently patched (design doc section 6 asks for exactly this disclosure).
   getCurrentAdapter(): DaemonPtyAdapter {
     return this.current
   }
@@ -334,6 +347,28 @@ export class DaemonPtyRouter implements IPtyProvider {
   // mutator here retires or reassigns an entry.
   getLegacyGenerationRegistry(): readonly DaemonLegacyGenerationRegistryEntry[] {
     return this.registry
+  }
+
+  // Why: daemon-generation-retirement.ts's verification step (4.3.1 of the design)
+  // needs the ROUTED session ids for one adapter, not the owner resolver's private
+  // inventory state, to decide whether a legacy generation still owns anything.
+  sessionsOwnedBy(adapter: DaemonPtyAdapter): string[] {
+    return this.ownerResolver.sessionsOwnedBy(adapter)
+  }
+
+  // Full behavior (checkpoint-then-migrate, "never the reverse order" verification
+  // ordering) documented at daemon-pty-router-generation-retirement.ts, split out
+  // to keep this file under its line budget.
+  async handoffIdleLegacySession(adapter: DaemonPtyAdapter, sessionId: string): Promise<boolean> {
+    return handoffIdleLegacySession(this.ownerResolver, this.current, adapter, sessionId)
+  }
+
+  // A real invariant change (see daemon-pty-router-generation-retirement.ts): this
+  // file's own construction comment above documents `legacy` as set once and never
+  // mutated. Callable only after the retirement scheduler's verification pass has
+  // proven the adapter owns zero remaining sessions (design doc section 4.3).
+  retireLegacyAdapter(adapter: DaemonPtyAdapter): void {
+    retireLegacyAdapter(this.legacy, this.subscriptions, this.ownerResolver, adapter)
   }
 
   private adapterFor(sessionId: string): DaemonPtyAdapter {
