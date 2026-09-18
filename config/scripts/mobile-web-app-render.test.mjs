@@ -30,6 +30,7 @@ let browser
 let origin
 let cspHeader = null
 let bridgeVersion = null
+let faultGrant = null
 
 /**
  * Both CSP constants are a list of quoted directives with `//` comments between them, and those
@@ -70,6 +71,19 @@ async function readBridgeProtocolVersion() {
   return Number(match[1])
 }
 
+/** The grant the shell offers every page, read from the same source for the same reason. */
+async function readBridgeFaultGrant() {
+  const source = await readFile(
+    join(projectDir, 'mobile/src/mobile-web-shell/bridge/bridge-envelope.ts'),
+    'utf8'
+  )
+  const match = /BRIDGE_FAULT_GRANT = '([a-zA-Z]+)'/.exec(source)
+  if (!match) {
+    throw new Error('could not read BRIDGE_FAULT_GRANT')
+  }
+  return match[1]
+}
+
 /**
  * The shell's half of the bridge, as the page's channel sees it.
  *
@@ -78,7 +92,10 @@ async function readBridgeProtocolVersion() {
  * place domain behaviour is decided, and every screen below already has a state for an RPC that
  * failed. The one message that matters here is the one that lets the tree mount.
  */
-function installShellDouble({ version, sessionId, buildId }) {
+function installShellDouble({ version, sessionId, buildId, faultGrant }) {
+  // Where the page's own fault reports land. Read back after the render, so a route that threw
+  // under the boundary names itself instead of timing out as a page that never mounted.
+  globalThis.__orcaRenderCheckFaults = []
   const channel = {
     postMessage: (json) => {
       const frame = JSON.parse(json)
@@ -102,8 +119,15 @@ function installShellDouble({ version, sessionId, buildId }) {
             lastInboundAt: 1,
             generation: 0
           },
-          grants: { rpc: { maxPendingRequests: 64, maxSubscriptions: 32 }, native: [] }
+          grants: {
+            rpc: { maxPendingRequests: 64, maxSubscriptions: 32 },
+            native: [faultGrant]
+          }
         })
+        return
+      }
+      if (frame.type === 'notify' && frame.name === faultGrant) {
+        globalThis.__orcaRenderCheckFaults.push(frame.error.message)
         return
       }
       if (frame.type === 'request' || frame.type === 'subscribe') {
@@ -142,6 +166,7 @@ async function readShellCsp() {
 beforeAll(async () => {
   cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
+  faultGrant = await readBridgeFaultGrant()
   if (!bundles) {
     return
   }
@@ -209,7 +234,8 @@ async function render(route, { shell = true } = {}) {
     await page.addInitScript(installShellDouble, {
       version: bridgeVersion,
       sessionId: SHELL_SESSION_ID,
-      buildId: SHELL_BUILD_ID
+      buildId: SHELL_BUILD_ID,
+      faultGrant
     })
   }
   const errors = []
@@ -257,6 +283,11 @@ async function render(route, { shell = true } = {}) {
       `${route} never mounted (entry ${state}): ${errors.join(' | ') || 'no page or console error'}`,
       { cause }
     )
+  }
+  // Folded into the errors the caller already asserts empty: a throw the boundary caught paints
+  // nothing and logs nothing a `pageerror` listener hears, so this is the only place it shows up.
+  for (const fault of await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])) {
+    errors.push(`page fault: ${fault}`)
   }
   const text = await page.evaluate(() => document.body.innerText)
   // What the page believes it is: read off the document rather than off the double, so a tree that

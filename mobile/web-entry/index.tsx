@@ -10,6 +10,7 @@ import {
   stampPageMountState,
   type PageMountTarget
 } from '../src/mobile-web-shell/bridge/page-bootstrap'
+import { PageFaultBoundary } from '../src/mobile-web-shell/bridge/page-fault-boundary'
 // Named with its extension: this entry is the web build's and the provider it needs is the web
 // sibling's, which takes the page's client. The screens below still import `./client-context`
 // and reach the same module, because the builder resolves both specifiers to the same file.
@@ -43,7 +44,15 @@ bootstrapShellPage({
   client: createShellPageClient(),
   mount: (client) => {
     createRoot(container).render(
-      <ExpoRoot context={routeContext} wrapper={createRootProviders(client, target)} />
+      // Above `ExpoRoot`, not inside its wrapper: a route this bundle cannot resolve or import
+      // throws where the router renders it, and a boundary below the router never sees that.
+      <PageFaultBoundary
+        onFault={(error) => {
+          client.notifyPageFault(error)
+        }}
+      >
+        <ExpoRoot context={routeContext} wrapper={createRootProviders(client, target)} />
+      </PageFaultBoundary>
     )
   }
 })
