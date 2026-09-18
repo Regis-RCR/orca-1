@@ -1,10 +1,26 @@
 import { resolve } from 'node:path'
-import { describe, it } from 'vitest'
-import { createBridgeHost } from '../../mobile-web-shell/bridge-host'
+import { describe, expect, it } from 'vitest'
+import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
 import {
-  createBridgeRpcClient,
-  type BridgeRpcClient
-} from '../../mobile-web-shell/bridge/bridge-rpc-client'
+  createBridgePortPair,
+  type BridgePortPair
+} from '../../mobile-web-shell/bridge/bridge-port-pair-test-harness'
+import type { RpcClient } from '../../transport/rpc-client'
+import {
+  BRIDGED_PARITY_BASELINE,
+  BRIDGED_PARITY_FLAG,
+  classifyBridgedParity,
+  type BridgedParityClass,
+  type BridgedParityEvidence
+} from './bridged-parity-classes.test'
+import {
+  divergingFields,
+  recordingWithoutRpcMeta,
+  refusedFrames,
+  scriptsAbsentResultReply,
+  sendsUndefinedValuedParam,
+  withReplyMeta
+} from './bridged-parity-evidence.test'
 import { familyGoldens, pilotGoldens } from './derived-goldens'
 import { compareGolden, readGolden } from './golden-recording'
 import { pilotMountAdapters } from './pilot-mount-adapters'
@@ -24,48 +40,55 @@ import { vitestRecordingScheduler } from './vitest-recording-scheduler'
  * run. This suite writes nothing, and it is not in `RECORDING_DRIVERS`, so `recorderSha256` does
  * not pin it — a suite that cannot put an observation in a recorded file is not provenance for one.
  *
- * ## Why it is off by default
+ * ## What it asserts today
  *
- * It does not pass yet, and the causes are findings about the bridge rather than about the corpus.
- * Run it with `RPC_FOUNDATION_BRIDGE=1` from `mobile/`: on the tree this lands on, 763 of the 787
- * goldens diverge and 24 replay byte-identically. Four causes, none of them a reason to re-record
- * anything.
+ * Byte-identical replay where it holds, and the named shape of every divergence where it does not.
+ * A golden that matches is compared in full; one that does not is classified by
+ * `classifyBridgedParity`, which reads the frames and the scenario rather than the failure's text,
+ * and the run fails if any class grows past `BRIDGED_PARITY_BASELINE` or if a single golden lands
+ * in `unclassified`. The corpus is a fixed size, so those two together pin every count exactly.
  *
- * 1. **372 goldens: `BridgeReplyPayloadSchema` requires `_meta` on both arms.** The native client's
- *    own acceptance predicate for a reply off the wire, `transport/rpc-response-shape.ts`, requires
- *    none, and `src/shared/runtime-rpc-envelope.ts` — the envelope clients and runtimes share —
- *    makes `_meta` optional on a failure and its `runtimeId` nullable. The page's reader is
+ * Five classes over the 787, none of them a reason to re-record anything, and 24 goldens that
+ * replay byte for byte: 372 / 338 / 7 / 33 / 13.
+ *
+ * 1. **reply-meta-required, 372.** `BridgeReplyPayloadSchema` requires `_meta` on both arms. The native
+ *    client's own acceptance predicate for a reply off the wire, `transport/rpc-response-shape.ts`,
+ *    requires none, and `src/shared/runtime-rpc-envelope.ts` — the envelope clients and runtimes
+ *    share — makes `_meta` optional on a failure and its `runtimeId` nullable. The page's reader is
  *    strictly narrower than the transport it stands in for, so replies the phone accepts today are
- *    refused. A refused `reply` is dropped with a diagnostic and settles nothing, so this one
- *    schema strands whole recordings: widening the two arms to an optional `_meta`, and to a
- *    nullable `runtimeId` on the failure arm, takes the divergence from 763 to 391 on its own.
- *
- * The remaining 391 partition exactly, and a run with that widening applied is what prints the
- * partition: a failure naming a `result-absent` checkpoint or expecting a bare `{ ok: true }`, a
- * failure reading `Request params mismatch`, and a failure whose differing field ends in
- * `ordinal`. Nothing else fails.
- *
- * 2. **345 goldens: the `result-absent` reply partition.** `{ ok: true }` with no `result` key is
- *    refused by the page reader and by `isRpcResponse` alike, so this one is not a bridge defect:
- *    the recorder injects that partition at the scripted sender port, below the frame validation
- *    both sides do, which is what the README means by not claiming malformed-frame coverage. A
- *    reply shape the wire itself drops cannot cross a real frame boundary, so byte-identical
- *    replay is not available for it at any bridge, and this class is a bound on the claim rather
- *    than a bug to close.
- * 3. **33 goldens: an own property whose value is `undefined` does not survive JSON.** The wire
- *    frame is serialized either way, so the desktop sees the same bytes; what changes is that
+ *    refused, dropped with a diagnostic, and settle nothing. This is the class the second replay
+ *    names, the one `withReplyMeta` supplies the field on: a golden that comes out byte-identical
+ *    once the page is given `_meta` had no other reason to diverge.
+ * 2. **result-absent-settlement, 338** and **3. result-absent-observation, 7.** `{ ok: true }` with no
+ *    `result` key is refused by the page's reader and by `isRpcResponse` alike, so this one is not
+ *    a bridge defect: the recorder injects that partition at the scripted sender port, below the
+ *    frame validation both sides do, which is what the README means by not claiming malformed-frame
+ *    coverage. A reply shape the wire itself drops cannot cross a real frame boundary, so
+ *    byte-identical replay is not available for it at any bridge. The two classes are the same
+ *    cause seen twice. In 338 the first thing that differs is a settlement that never arrives. In
+ *    the other seven the listener got far enough to act, so what differs first is downstream of the
+ *    reply rather than the reply itself: three relay and pairing matrix goldens reach a different
+ *    set of checkpoints, and four notification and chat ones lose an effect, either the
+ *    stream-listener crash a `TypeError` on the absent result used to raise or a dismissal write
+ *    that no longer happens. The suite names all seven in its output for as long as the class is
+ *    small enough to name.
+ * 4. **params-undefined, 33.** An own property whose value is `undefined` does not survive JSON. The
+ *    wire frame is serialized either way, so the desktop sees the same bytes; what changes is that
  *    `projectMobileRpcRequestParams` runs shell-side on params that have already lost the key.
- * 4. **13 goldens: the write ordinal counts one hop of the bridge.** Not a reorder on the wire —
- *    the page posts its frames in the order the operation made them, and the payloads are published
- *    below the bridge in that same order. What moves is every write the operation makes *above* the
- *    bridge, which is the logical `sendRequest` stamp and each device effect: those happen at the
- *    call, while the payload of a `subscribe` or a request issued in the same turn is published a
- *    delivery later. `write-ordinal.ts` counts both into one sequence, so the two interleave
- *    differently. Twelve of the thirteen are a `subscribe` payload falling behind a same-turn
- *    request or effect; in `settings-home-coalesced` one device effect and one request payload
- *    trade places for the same reason.
+ * 5. **write-ordinal, 13.** Not a reorder on the wire: the page posts its frames in the order the
+ *    operation made them and the payloads publish below the bridge in that same order. What moves
+ *    is every write the operation makes *above* the bridge, the logical `sendRequest` stamp and
+ *    each device effect, because those happen at the call while a same-turn `subscribe` payload is
+ *    published a delivery later. `write-ordinal.ts` counts both into one sequence.
  *
- * Flipping the gate is one line once those close, and the counts above are the ratchet.
+ * ## What C1.6 owns and what it does not
+ *
+ * C1.6 closes the first class and nothing else. The ordinal class is excluded from it by the
+ * predicate above: it is an artefact of where the recorder stamps, not of the bridge, and the only
+ * recorder change that would close it — a logical `subscribe` stamp taken above the wrapper — moves
+ * golden bodies, so no recorder engine change lands here beyond the seam itself. The two
+ * `result-absent` classes are a bound on the claim rather than a bug, and `params-undefined` is a
+ * shell-side projection question for whoever moves that screen.
  */
 
 const root = resolve(import.meta.dirname, '../../../..')
@@ -82,149 +105,200 @@ const BUILD_ID = 'recording-build'
 /** `ready` out, `init` back: two deliveries, and a round to see that the session landed. */
 const HANDSHAKE_ROUNDS = 4
 
-type BridgeLane = {
-  push: (json: string) => void
-  /** Delivers what is queued now, for the one exchange that has to land before anything mounts. */
-  drainNow: () => void
+type Replay = {
+  recording: Recording | null
+  thrown: unknown
+  pairs: BridgePortPair<RpcClient>[]
 }
+
+const counts: Record<BridgedParityClass, number> = {
+  'reply-meta-required': 0,
+  'result-absent-settlement': 0,
+  'result-absent-observation': 0,
+  'params-undefined': 0,
+  'write-ordinal': 0,
+  unclassified: 0
+}
+let identical = 0
+const members = new Map<BridgedParityClass, string[]>()
+const samples = new Map<BridgedParityClass, string>()
+/** Small enough that naming every member beats naming a count. */
+const NAMEABLE = 8
 
 /**
- * One direction of the pair: a FIFO queue drained one frame per microtask.
+ * The page's client over the shared port pair, holding the recorder's scripted client shell-side.
  *
- * Both properties are load-bearing for a byte-identical replay. FIFO, because the payloads are
- * published in delivery order, so a lane that passed a `subscribe` ahead of a `sendRequest` would
- * move the shared write ordinal and manufacture the reorder `write-ordinal.ts` exists to catch. A
- * microtask, because it is the weakest async the runner's zero-time drains flush and the only one
- * that moves no virtual millisecond off the recording's pinned clock. It is still one hop, which is
- * what the thirteen ordinal divergences in the header count.
+ * The handshake is delivered in place because `BridgeRpcClient` refuses every member until `init`
+ * has landed and its getters are what a screen reads during its first render, so a mount that raced
+ * it would record a different first render. Nothing else has been queued at this point, so draining
+ * here cannot reorder anything.
  */
-function bridgeLane(deliver: (json: string) => void): BridgeLane {
-  const queue: string[] = []
-  let scheduled = false
-  function drainOne(): void {
-    scheduled = false
-    const next = queue.shift()
-    if (next === undefined) {
-      return
-    }
-    deliver(next)
-    schedule()
-  }
-  function schedule(): void {
-    if (scheduled || queue.length === 0) {
-      return
-    }
-    scheduled = true
-    void Promise.resolve().then(drainOne)
-  }
-  return {
-    push(json: string): void {
-      queue.push(json)
-      schedule()
-    },
-    drainNow(): void {
-      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-        deliver(next)
-      }
-    }
-  }
-}
-
-/**
- * The handshake, synchronously, before the operation mounts.
- *
- * `BridgeRpcClient` refuses every member until `init` has landed, and its getters are what a screen
- * reads during its first render. A mount that raced the handshake would record a different first
- * render, so the one exchange the page cannot start without is the one exchange delivered in place.
- * Nothing else has been queued at this point, so draining here cannot reorder anything.
- */
-function primeSession(toShell: BridgeLane, toPage: BridgeLane, page: BridgeRpcClient): void {
-  for (let round = 0; round < HANDSHAKE_ROUNDS; round += 1) {
-    toShell.drainNow()
-    toPage.drainNow()
-    if (page.getShellSession() !== null) {
-      return
-    }
-  }
-  throw new Error('the page never received `init` from the bridge host')
-}
-
-/** The page's client over an in-memory pair to a host holding the recorder's scripted client. */
-function throughBridge(): ScriptedClientWrapper {
+function throughBridge(
+  keep: (pair: BridgePortPair<RpcClient>) => void,
+  rewriteToPage?: (json: string) => string
+): ScriptedClientWrapper {
   return (client) => {
-    let receiveOnPage: ((json: string) => void) | null = null
-    const toPage = bridgeLane((json) => receiveOnPage?.(json))
-    const host = createBridgeHost({
-      client,
-      post: (json) => {
-        toPage.push(json)
-        return Promise.resolve()
-      },
+    const pair = createBridgePortPair({
+      rpc: client,
+      sessionId: SESSION_ID,
       buildId: BUILD_ID,
-      sessionId: SESSION_ID
+      rewriteToPage
     })
-    const toShell = bridgeLane((json) => {
-      host.receive(json)
-    })
-    const page = createBridgeRpcClient({
-      send: (json) => {
-        toShell.push(json)
-      },
-      onMessage: (handler) => {
-        receiveOnPage = handler
-        return () => {
-          receiveOnPage = null
-        }
+    keep(pair)
+    for (let round = 0; round < HANDSHAKE_ROUNDS; round += 1) {
+      if (pair.client.getShellSession() !== null) {
+        return pair.client
       }
-    })
-    primeSession(toShell, toPage, page)
-    return page
+      pair.drainNow()
+    }
+    throw new Error('the page never received `init` from the bridge host')
   }
 }
 
-async function recordThroughBridge(scenario: RecordingScenario): Promise<Recording> {
-  const { adapters } = pilotMountAdapters(root, { device: scenario })
-  return await runRecording(
-    scenario,
-    adapters[scenario.operation],
-    vitestRecordingScheduler(),
-    throughBridge()
-  )
+async function replay(
+  id: string,
+  scenarios: readonly RecordingScenario[],
+  rewriteToPage?: (json: string) => string
+): Promise<Replay> {
+  const pairs: BridgePortPair<RpcClient>[] = []
+  const checkpoints: Recording['checkpoints'] = []
+  const named = scenarios.length > 1
+  try {
+    for (const scenario of scenarios) {
+      const { adapters } = pilotMountAdapters(root, { device: scenario })
+      const recording = await runRecording(
+        scenario,
+        adapters[scenario.operation],
+        vitestRecordingScheduler(),
+        throughBridge((pair) => pairs.push(pair), rewriteToPage)
+      )
+      for (const checkpoint of recording.checkpoints) {
+        checkpoints.push(
+          named ? { ...checkpoint, id: `${scenario.id}:${checkpoint.id}` } : checkpoint
+        )
+      }
+    }
+    return { recording: { scenario: id, checkpoints }, thrown: null, pairs }
+  } catch (error) {
+    return { recording: null, thrown: error, pairs }
+  }
+}
+
+/** Everything the run knows about why it diverged, so a new class arrives readable, not as a stall. */
+function explain(fields: readonly string[], run: Replay): string {
+  const refused = refusedFrames(run.pairs.flatMap((pair) => pair.toPage))
+  const [refusal] = refused
+  const read = refusal === undefined ? null : readBridgeHostMessage(refusal)
+  const kinds = run.pairs.flatMap((pair) => pair.diagnostics).map((diagnostic) => diagnostic.kind)
+  return [
+    `  fields    ${fields.slice(0, 4).join(', ') || '(none)'}`,
+    `  threw     ${run.thrown instanceof Error ? run.thrown.message : '(nothing)'}`,
+    `  refused   ${refused.length} frame(s)${
+      read !== null && !read.ok ? `, first "${read.refusal}" on ${refusal?.slice(0, 200)}` : ''
+    }`,
+    `  page saw  ${kinds.join(', ') || '(no diagnostics)'}`
+  ].join('\n')
 }
 
 /**
- * Body against body. The committed header is spliced onto the bridged recording so `compareGolden`
- * reports the scenario, checkpoint, field and JSON path it always does, and so the provenance of
- * the committed file is not compared against a run that did not produce it.
+ * The verdict on one golden, and where it diverged, the counterfactual that says why.
+ *
+ * The second replay runs only for a golden that already diverged, and it is the one question the
+ * page cannot be asked any other way: the reader wants a `_meta` the wire it stands in for does not
+ * send, so a run where the lane supplies it separates what that costs from what the payload itself
+ * does. Its own `_meta` comes back off before the diff, because a reply the page accepts resolves
+ * to the caller whole.
  */
-function expectSameBody(id: string, recording: Recording): void {
+async function verdict(
+  id: string,
+  scenarios: readonly RecordingScenario[],
+  run: Replay
+): Promise<void> {
   const expected = readGolden(directory, id)
-  compareGolden(expected, { ...expected, recording })
+  const fields = run.recording === null ? [] : divergingFields(expected.recording, run.recording)
+  if (run.recording !== null && fields.length === 0) {
+    // Not redundant with the field walk: this one also pins the encoding and the header.
+    compareGolden(expected, { ...expected, recording: run.recording })
+    identical += 1
+    return
+  }
+  const asIf = await replay(id, scenarios, withReplyMeta)
+  const asIfFields =
+    asIf.recording === null
+      ? []
+      : divergingFields(expected.recording, recordingWithoutRpcMeta(asIf.recording))
+  const evidence: BridgedParityEvidence = {
+    fixedByReplyMeta: asIf.recording !== null && asIfFields.length === 0,
+    threwWhileRecording: asIf.recording === null,
+    divergingFields: asIfFields,
+    scriptsAbsentResultReply: scenarios.some(scriptsAbsentResultReply),
+    sendsUndefinedValuedParam: scenarios.some(sendsUndefinedValuedParam)
+  }
+  const name = classifyBridgedParity(evidence)
+  counts[name] += 1
+  if (name === 'unclassified') {
+    throw new Error(
+      `Unclassified bridged divergence: ${id}\n${explain(fields, run)}\nwith \`_meta\` supplied:\n${explain(asIfFields, asIf)}`
+    )
+  }
+  members.set(name, [...(members.get(name) ?? []), id])
+  if (!samples.has(name)) {
+    samples.set(name, `${id}\n${explain(fields, run)}`)
+  }
 }
 
-describe.runIf(process.env.RPC_FOUNDATION_BRIDGE === '1')(
-  'every golden replays byte-identically through the page bridge',
+describe.runIf(process.env[BRIDGED_PARITY_FLAG] === '1')(
+  'every golden replays through the page bridge, byte-identically or in a named class',
   () => {
     for (const pilot of pilotGoldens(input.scenarios)) {
       it(`${pilot.id}: bridged parity`, async () => {
-        expectSameBody(pilot.id, await recordThroughBridge(pilot.scenario))
+        await verdict(pilot.id, [pilot.scenario], await replay(pilot.id, [pilot.scenario]))
       })
     }
     for (const golden of familyGoldens(input.scenarios)) {
       it(
         `${golden.id}: bridged parity`,
         async () => {
-          const checkpoints: Recording['checkpoints'] = []
-          for (const scenario of golden.scenarios()) {
-            const recording = await recordThroughBridge(scenario)
-            for (const checkpoint of recording.checkpoints) {
-              checkpoints.push({ ...checkpoint, id: `${scenario.id}:${checkpoint.id}` })
-            }
-          }
-          expectSameBody(golden.id, { scenario: golden.id, checkpoints })
+          const scenarios = [...golden.scenarios()]
+          await verdict(golden.id, scenarios, await replay(golden.id, scenarios))
         },
         golden.timeoutMs
       )
     }
+    it('partitions every divergence into the classes the pin names', () => {
+      const table = [
+        `identical ${identical}`,
+        ...Object.entries(counts).map(([name, count]) => {
+          const named = members.get(asClass(name)) ?? []
+          return count > 0 && count <= NAMEABLE
+            ? `${name} ${count}: ${named.join(', ')}`
+            : `${name} ${count}`
+        })
+      ].join('\n')
+      process.stdout.write(`\nbridged parity over ${identical + total(counts)} goldens\n${table}\n`)
+      for (const [name, sample] of samples) {
+        process.stdout.write(`\n${name} sample\n${sample}\n`)
+      }
+      expect(counts.unclassified).toBe(0)
+      for (const [name, count] of Object.entries(counts)) {
+        expect({ [name]: count }).toEqual({
+          [name]: Math.min(count, BRIDGED_PARITY_BASELINE[asClass(name)])
+        })
+      }
+      expect(identical).toBeGreaterThanOrEqual(BRIDGED_PARITY_BASELINE.identical)
+    })
   }
 )
+
+function total(record: Record<string, number>): number {
+  return Object.values(record).reduce((sum, count) => sum + count, 0)
+}
+
+/** The keys are this union by construction; the lookup below is what needs to say so. */
+function asClass(name: string): BridgedParityClass {
+  if (!(name in counts)) {
+    throw new Error(`Not a bridged parity class: ${name}`)
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `name in counts` was just checked, and `counts` has exactly the union's keys.
+  return name as BridgedParityClass
+}
