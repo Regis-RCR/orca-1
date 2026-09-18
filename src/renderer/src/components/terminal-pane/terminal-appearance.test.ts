@@ -157,6 +157,7 @@ describe('applyTerminalAppearance theme assignment', () => {
   }
 
   function makeManager(panes: ManagedPane[]): PaneManager {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the manager members exercised by appearance logic.
     return {
       // Mirrors the real getPanes(), which allocates a fresh toPublicPane()
       // wrapper per call over a shared terminal — per-pane state must survive that.
