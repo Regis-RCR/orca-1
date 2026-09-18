@@ -27,34 +27,43 @@ import { vitestRecordingScheduler } from './vitest-recording-scheduler'
  * ## Why it is off by default
  *
  * It does not pass yet, and the causes are findings about the bridge rather than about the corpus.
- * Measured on 2026-09-18 over all 787 goldens against the tree this lands on: 763 diverge, 24
- * replay byte-identically. Four causes, none of them a reason to re-record anything.
+ * Run it with `RPC_FOUNDATION_BRIDGE=1` from `mobile/`: on the tree this lands on, 763 of the 787
+ * goldens diverge and 24 replay byte-identically. Four causes, none of them a reason to re-record
+ * anything.
  *
  * 1. **372 goldens: `BridgeReplyPayloadSchema` requires `_meta` on both arms.** The native client's
  *    own acceptance predicate for a reply off the wire, `transport/rpc-response-shape.ts`, requires
  *    none, and `src/shared/runtime-rpc-envelope.ts` — the envelope clients and runtimes share —
  *    makes `_meta` optional on a failure and its `runtimeId` nullable. The page's reader is
  *    strictly narrower than the transport it stands in for, so replies the phone accepts today are
- *    refused. Widening the two arms to an optional `_meta`, and to a nullable `runtimeId` on the
- *    failure arm, takes the divergence from 763 to 391 and is the whole of that class.
- * 2. **340 goldens: the `result-absent` reply partition.** `{ ok: true }` with no `result` key is
- *    refused by the page's reader and by `isRpcResponse` alike, so this one is not a bridge defect:
+ *    refused. A refused `reply` is dropped with a diagnostic and settles nothing, so this one
+ *    schema strands whole recordings: widening the two arms to an optional `_meta`, and to a
+ *    nullable `runtimeId` on the failure arm, takes the divergence from 763 to 391 on its own.
+ *
+ * The remaining 391 partition exactly, and a run with that widening applied is what prints the
+ * partition: a failure naming a `result-absent` checkpoint or expecting a bare `{ ok: true }`, a
+ * failure reading `Request params mismatch`, and a failure whose differing field ends in
+ * `ordinal`. Nothing else fails.
+ *
+ * 2. **345 goldens: the `result-absent` reply partition.** `{ ok: true }` with no `result` key is
+ *    refused by the page reader and by `isRpcResponse` alike, so this one is not a bridge defect:
  *    the recorder injects that partition at the scripted sender port, below the frame validation
  *    both sides do, which is what the README means by not claiming malformed-frame coverage. A
  *    reply shape the wire itself drops cannot cross a real frame boundary, so byte-identical
  *    replay is not available for it at any bridge, and this class is a bound on the claim rather
  *    than a bug to close.
- * 3. **13 goldens: a `subscribe` publishes after a `sendRequest` that natively preceded it.**
- *    `BridgeRpcClient.subscribe` returns synchronously while the shell's `client.subscribe` runs a
- *    microtask later, and the request's logical ordinal is taken at the call. This is exactly the
- *    reorder `write-ordinal.ts` exists to catch, and it is a real property of the bridge: 7 sender
- *    ordinals and 6 payload ordinals.
- * 4. **13 goldens: an own property whose value is `undefined` does not survive JSON.** The wire
+ * 3. **33 goldens: an own property whose value is `undefined` does not survive JSON.** The wire
  *    frame is serialized either way, so the desktop sees the same bytes; what changes is that
  *    `projectMobileRpcRequestParams` runs shell-side on params that have already lost the key.
- *
- * Amplifying all of them: a `reply` frame the page's reader refuses is dropped with a diagnostic
- * and nothing settles the request, so one narrow schema becomes a cascade of stranded promises.
+ * 4. **13 goldens: the write ordinal counts one hop of the bridge.** Not a reorder on the wire —
+ *    the page posts its frames in the order the operation made them, and the payloads are published
+ *    below the bridge in that same order. What moves is every write the operation makes *above* the
+ *    bridge, which is the logical `sendRequest` stamp and each device effect: those happen at the
+ *    call, while the payload of a `subscribe` or a request issued in the same turn is published a
+ *    delivery later. `write-ordinal.ts` counts both into one sequence, so the two interleave
+ *    differently. Twelve of the thirteen are a `subscribe` payload falling behind a same-turn
+ *    request or effect; in `settings-home-coalesced` one device effect and one request payload
+ *    trade places for the same reason.
  *
  * Flipping the gate is one line once those close, and the counts above are the ratchet.
  */
@@ -82,10 +91,12 @@ type BridgeLane = {
 /**
  * One direction of the pair: a FIFO queue drained one frame per microtask.
  *
- * Both properties are load-bearing for a byte-identical replay. FIFO, because a `subscribe` that
- * overtook a `sendRequest` moves the shared write ordinal, which is the reorder `write-ordinal.ts`
- * exists to catch. A microtask, because it is the weakest async the runner's zero-time drains flush
- * and the only one that moves no virtual millisecond off the recording's pinned clock.
+ * Both properties are load-bearing for a byte-identical replay. FIFO, because the payloads are
+ * published in delivery order, so a lane that passed a `subscribe` ahead of a `sendRequest` would
+ * move the shared write ordinal and manufacture the reorder `write-ordinal.ts` exists to catch. A
+ * microtask, because it is the weakest async the runner's zero-time drains flush and the only one
+ * that moves no virtual millisecond off the recording's pinned clock. It is still one hop, which is
+ * what the thirteen ordinal divergences in the header count.
  */
 function bridgeLane(deliver: (json: string) => void): BridgeLane {
   const queue: string[] = []
