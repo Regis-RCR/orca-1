@@ -27,34 +27,36 @@ import { vitestRecordingScheduler } from './vitest-recording-scheduler'
  * ## Why it is off by default
  *
  * It does not pass yet, and the causes are findings about the bridge rather than about the corpus.
- * Measured on 2026-09-18 over all 787 goldens, with the seam below as it stands: 391 diverge. Four
- * causes, none of them a reason to re-record anything:
+ * Measured on 2026-09-18 over all 787 goldens against the tree this lands on: 763 diverge, 24
+ * replay byte-identically. Four causes, none of them a reason to re-record anything.
  *
- * 1. **323 goldens: `BridgeReplyPayloadSchema` requires `_meta` on both arms.** The native client's
+ * 1. **372 goldens: `BridgeReplyPayloadSchema` requires `_meta` on both arms.** The native client's
  *    own acceptance predicate for a reply off the wire, `transport/rpc-response-shape.ts`, requires
  *    none, and `src/shared/runtime-rpc-envelope.ts` — the envelope clients and runtimes share —
  *    makes `_meta` optional on a failure and its `runtimeId` nullable. The page's reader is
  *    strictly narrower than the transport it stands in for, so replies the phone accepts today are
- *    refused. Widening the two arms to `_meta` optional, and to a nullable `runtimeId` on the
- *    failure arm, takes the divergence from 757 to 434.
- * 2. **~345 goldens: the `result-absent` reply partition.** `{ ok: true }` with no `result` key is
+ *    refused. Widening the two arms to an optional `_meta`, and to a nullable `runtimeId` on the
+ *    failure arm, takes the divergence from 763 to 391 and is the whole of that class.
+ * 2. **340 goldens: the `result-absent` reply partition.** `{ ok: true }` with no `result` key is
  *    refused by the page's reader and by `isRpcResponse` alike, so this one is not a bridge defect:
  *    the recorder injects that partition at the scripted sender port, below the frame validation
  *    both sides do, which is what the README means by not claiming malformed-frame coverage. A
  *    reply shape the wire itself drops cannot cross a real frame boundary, so byte-identical
- *    replay is not available for it at any bridge.
+ *    replay is not available for it at any bridge, and this class is a bound on the claim rather
+ *    than a bug to close.
  * 3. **13 goldens: a `subscribe` publishes after a `sendRequest` that natively preceded it.**
- *    `BridgeRpcClient.subscribe` returns synchronously and the shell's `client.subscribe` runs a
- *    microtask later, while the request's logical ordinal is taken at the call. This is exactly the
- *    reorder `write-ordinal.ts` exists to catch, and it is a real property of the bridge.
+ *    `BridgeRpcClient.subscribe` returns synchronously while the shell's `client.subscribe` runs a
+ *    microtask later, and the request's logical ordinal is taken at the call. This is exactly the
+ *    reorder `write-ordinal.ts` exists to catch, and it is a real property of the bridge: 7 sender
+ *    ordinals and 6 payload ordinals.
  * 4. **13 goldens: an own property whose value is `undefined` does not survive JSON.** The wire
  *    frame is serialized either way, so the desktop sees the same bytes; what changes is that
  *    `projectMobileRpcRequestParams` runs shell-side on params that have already lost the key.
  *
  * Amplifying all of them: a `reply` frame the page's reader refuses is dropped with a diagnostic
- * and nothing settles the request, so one narrow schema turns into a cascade of stranded promises.
+ * and nothing settles the request, so one narrow schema becomes a cascade of stranded promises.
  *
- * Flipping the gate is one line once those are closed, and the ratchet is the count above.
+ * Flipping the gate is one line once those close, and the counts above are the ratchet.
  */
 
 const root = resolve(import.meta.dirname, '../../../..')
