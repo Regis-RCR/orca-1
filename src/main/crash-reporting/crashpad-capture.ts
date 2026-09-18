@@ -296,7 +296,9 @@ export async function captureMinidumpSignature(
       }
       reservedDumpPaths.add(dump.filePath)
       try {
-        const { buffer } = await readNodeFileWithinLimit(dump.filePath, MAX_DUMP_BYTES)
+        const { buffer } = await readNodeFileWithinLimit(dump.filePath, MAX_DUMP_BYTES, {
+          followGrowth: false
+        })
         const signature = parseMinidumpCrashSignature(buffer, {
           expectedProcessType: options.expectedProcessType
         })

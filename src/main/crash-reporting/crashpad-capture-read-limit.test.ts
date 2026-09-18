@@ -194,7 +194,7 @@ it('can recover partial-header rejection after completed-path promotion', async 
   expect(state.parsedBytes).toEqual([4, 131])
 })
 
-it('bounds same-open growth after descriptor stat and releases the reservation', async () => {
+it('preserves the opened dump when later growth exceeds the limit', async () => {
   const next = await file('next.dmp')
   const race = await file('racing.dmp', true)
   let grew = false
@@ -208,11 +208,11 @@ it('bounds same-open growth after descriptor stat and releases the reservation',
   }
   const result = await capture()
   expect(grew).toBe(true)
-  expect(result?.filePath).toBe(next)
+  expect(result?.filePath).toBe(race)
+  expect(result?.sizeBytes).toBe(131)
   expect(state.parsedBytes).toEqual([131])
-  expect(state.closedPaths).toEqual(expect.arrayContaining([race, next]))
-  await writeFile(race, rendererDump())
-  expect((await capture())?.filePath).toBe(race)
+  expect(state.closedPaths).toEqual([race])
+  expect((await capture())?.filePath).toBe(next)
 })
 
 it('records bytes actually parsed when permitted growth follows directory stat', async () => {

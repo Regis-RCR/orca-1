@@ -25,7 +25,7 @@ function createFileHandle({ content, initialSize, readError, statError }: FileHa
   })
   const stat = statError
     ? vi.fn().mockRejectedValue(statError)
-    : vi.fn().mockResolvedValue({ size: initialSize ?? content.byteLength })
+    : vi.fn().mockResolvedValue({ size: initialSize ?? content.byteLength, isFile: () => true })
   return { close, read, stat }
 }
 
@@ -61,6 +61,44 @@ describe('readNodeFileWithinLimit', () => {
     const result = await readNodeFileWithinLimit('/workspace/growing.txt', 5)
 
     expect(result.buffer).toEqual(Buffer.from('grown'))
+    expect(handle.close).toHaveBeenCalledOnce()
+  })
+
+  it('preserves the opened regular-file prefix when later growth exceeds the limit', async () => {
+    const handle = createFileHandle({
+      content: Buffer.from('initial plus appended'),
+      initialSize: 7
+    })
+    openMock.mockResolvedValue(handle)
+
+    const result = await readNodeFileWithinLimit('/workspace/growing.dmp', 8, {
+      followGrowth: false
+    })
+
+    expect(result.buffer.toString()).toBe('initial')
+    expect(handle.read).toHaveBeenCalledOnce()
+    expect(handle.close).toHaveBeenCalledOnce()
+  })
+
+  it('keeps size-zero readFile semantics when following growth is disabled', async () => {
+    const handle = createFileHandle({ content: Buffer.from('appeared'), initialSize: 0 })
+    openMock.mockResolvedValue(handle)
+
+    const result = await readNodeFileWithinLimit('/workspace/empty.dmp', 8, { followGrowth: false })
+
+    expect(result.buffer.toString()).toBe('appeared')
+    expect(handle.close).toHaveBeenCalledOnce()
+  })
+
+  it('returns actual bytes when an opened prefix shrinks', async () => {
+    const handle = createFileHandle({ content: Buffer.from('short'), initialSize: 8 })
+    openMock.mockResolvedValue(handle)
+
+    const result = await readNodeFileWithinLimit('/workspace/shrinking.dmp', 8, {
+      followGrowth: false
+    })
+
+    expect(result.buffer.toString()).toBe('short')
     expect(handle.close).toHaveBeenCalledOnce()
   })
 

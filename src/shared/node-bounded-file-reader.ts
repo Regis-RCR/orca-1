@@ -20,6 +20,11 @@ export type BoundedNodeFileRead = {
   stats: Stats
 }
 
+type BoundedNodeFileReadOptions = {
+  /** Match Buffer readFile for nonempty regular files; size-zero sources still read to EOF. */
+  followGrowth?: boolean
+}
+
 function validateSize(size: number, maxBytes: number): void {
   if (!Number.isSafeInteger(size) || size < 0) {
     throw new Error('File has an invalid byte size')
@@ -31,11 +36,12 @@ function validateSize(size: number, maxBytes: number): void {
 
 export async function readNodeFileWithinLimit(
   filePath: string,
-  maxBytes: number
+  maxBytes: number,
+  options: BoundedNodeFileReadOptions = {}
 ): Promise<BoundedNodeFileRead> {
   const handle = await open(filePath, 'r')
   try {
-    return await readNodeFileHandleWithinLimit(handle, maxBytes)
+    return await readNodeFileHandleWithinLimit(handle, maxBytes, options)
   } finally {
     await handle.close()
   }
@@ -43,7 +49,8 @@ export async function readNodeFileWithinLimit(
 
 export async function readNodeFileHandleWithinLimit(
   handle: FileHandle,
-  maxBytes: number
+  maxBytes: number,
+  options: BoundedNodeFileReadOptions = {}
 ): Promise<BoundedNodeFileRead> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new RangeError('File read limit must be a non-negative safe integer')
@@ -63,6 +70,10 @@ export async function readNodeFileHandleWithinLimit(
       offset += bytesRead
     }
 
+    if (options.followGrowth === false && stats.size > 0 && stats.isFile()) {
+      return { buffer, stats }
+    }
+
     const probe = Buffer.allocUnsafe(1)
     const { bytesRead } = await handle.read(probe, 0, 1, offset)
     if (bytesRead === 0) {
@@ -72,7 +83,7 @@ export async function readNodeFileHandleWithinLimit(
       throw new NodeFileReadTooLargeError(offset + bytesRead, maxBytes)
     }
 
-    // Why: ordinary readFile includes concurrent growth, so retain that behavior while capacity stays bounded.
+    // Callers that follow growth need spare capacity without exceeding their byte budget.
     const nextCapacity = Math.min(
       maxBytes,
       Math.max(MIN_GROWTH_BYTES, buffer.length * 2, offset + bytesRead)
