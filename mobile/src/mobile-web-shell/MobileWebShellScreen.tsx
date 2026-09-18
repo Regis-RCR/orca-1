@@ -149,6 +149,14 @@ export function MobileWebShellScreen({
     route,
     pageRoutes,
     session: state,
+    // Reported as the document failing to load, which is what it is: the document loaded and never
+    // produced a tree. That reason drops this generation and downloads once, so a page broken by
+    // bytes this host has since replaced recovers, and a page broken by its own code stops at the
+    // failure screen instead of a blank one.
+    onPageFault: (error) => {
+      console.warn('[web-shell] the page faulted', error)
+      reportShellFailure('document-load-failed')
+    },
     // Pushed, never replaced: the page stays mounted underneath, so Back reveals it with no
     // download and no second `init`.
     onNavigate: (href: string) => {

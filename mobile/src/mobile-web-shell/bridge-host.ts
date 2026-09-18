@@ -1,5 +1,6 @@
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState, RpcResponse } from '../transport/types'
+import { BridgeCapExceededError, BridgeReplyUndeliverableError } from './bridge-host-errors'
 import { BridgeHostRequests } from './bridge-host-requests'
 import { BridgeHostSubscriptions } from './bridge-host-subscriptions'
 import { MOBILE_WEB_SHELL_GRANTS } from './page-route-policy'
@@ -9,6 +10,7 @@ import {
   type BridgeRefusal
 } from './bridge/bridge-caps'
 import {
+  BRIDGE_FAULT_GRANT,
   BRIDGE_PROTOCOL_VERSION,
   readBridgeClientMessage,
   type BridgeClientMessage,
@@ -16,7 +18,7 @@ import {
   type BridgeHostMessage,
   type BridgeInitRoute
 } from './bridge/bridge-envelope'
-import { captureBridgeError } from './bridge/bridge-error-capture'
+import { captureBridgeError, type BridgeErrorCapture } from './bridge/bridge-error-capture'
 import { splitBridgeReply } from './bridge/bridge-reply-chunking'
 
 type SubscribeMessage = Extract<BridgeClientMessage, { type: 'subscribe' }>
@@ -29,8 +31,8 @@ export type BridgeHostDiagnostic =
   /** A page posting into a host that has already been disposed, which its own view is the only
    *  thing that can do. Dropping it silently is what hides a leaked view. */
   | { kind: 'frame-after-dispose' }
-  /** A client that threw where the bridge only forwards. Nothing is owed to the page for a notify,
-   *  so the throw is reported rather than answered. */
+  /** A listener that threw where the bridge only forwards. Nothing is owed to the page for a
+   *  notify, so the throw is reported rather than answered. */
   | { kind: 'notify-failed'; error: unknown }
   /** A frame that arrived between a page's `close` and the next document's `ready`. It belongs to
    *  the closed document, and serving it would answer into whatever loads in next. */
@@ -59,26 +61,18 @@ export type BridgeHostOptions = {
    * nothing is a dead tap, which is exactly what the grant is supposed to rule out.
    */
   onNavigate: (href: string) => void
+  /**
+   * The page could not render the generation it was handed. Required, because the page has no
+   * recovery of its own: the generation is on disk and was hash-checked before the view loaded it,
+   * so the same bytes throw again, and the only thing left is for the shell to stop showing them.
+   */
+  onPageFault: (error: BridgeErrorCapture) => void
   onDiagnostic?: (diagnostic: BridgeHostDiagnostic) => void
 }
 
 export type BridgeHost = {
   receive: (json: string) => void
   dispose: () => void
-}
-
-class BridgeCapExceededError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'BridgeCapExceededError'
-  }
-}
-
-class BridgeReplyUndeliverableError extends Error {
-  constructor(refusal: BridgeRefusal) {
-    super(`the reply could not be delivered to the page (${refusal})`)
-    this.name = 'BridgeReplyUndeliverableError'
-  }
 }
 
 /**
@@ -168,8 +162,9 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         },
         // What this shell will do on the page's behalf, and it is what makes the page's `navigate`
         // frame something other than a frame this side refuses. A name added here is never a
-        // version bump; a page that does not know one simply never posts it.
-        native: [...MOBILE_WEB_SHELL_GRANTS]
+        // version bump; a page that does not know one simply never posts it. `fault` leads because
+        // it is the protocol's rather than a screen's: every page gets it, no route declares it.
+        native: [BRIDGE_FAULT_GRANT, ...MOBILE_WEB_SHELL_GRANTS]
       },
       route,
       pageRoutes: [...pageRoutes]
@@ -218,6 +213,12 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
    *  the native event handler that delivered the page's frame. Nothing is owed to the page here. */
   function forwardNotify(message: NotifyMessage): void {
     try {
+      if (message.name === BRIDGE_FAULT_GRANT) {
+        // Not the client's: a page that threw is this session's problem, and the desktop on the
+        // other end of the client has nothing to do with it.
+        options.onPageFault(message.error)
+        return
+      }
       if (message.name === 'foreground') {
         if (message.reason === undefined) {
           client.notifyForeground()
@@ -237,8 +238,8 @@ export function createBridgeHost(options: BridgeHostOptions): BridgeHost {
         rows: message.rows
       })
     } catch (error) {
-      // Once per session, for the reason a failing post is: a page nudging a broken client nudges it
-      // again on every foreground.
+      // Once per session, for the reason a failing post is: a page nudging a broken listener nudges
+      // it again on every foreground.
       if (notifyFailureReported) {
         return
       }

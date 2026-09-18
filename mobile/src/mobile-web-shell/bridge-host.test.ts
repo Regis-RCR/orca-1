@@ -17,10 +17,12 @@ import {
   BRIDGE_MAX_SUBSCRIPTIONS
 } from './bridge/bridge-caps'
 import {
+  BRIDGE_FAULT_GRANT,
   readBridgeHostMessage,
   type BridgeHostMessage,
   type BridgeInitRoute
 } from './bridge/bridge-envelope'
+import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import { BridgeReplyAssembler } from './bridge/bridge-reply-chunking'
 
 const ID = bridgeId(1)
@@ -32,6 +34,7 @@ type Harness = {
   posted: string[]
   diagnostics: BridgeHostDiagnostic[]
   navigations: string[]
+  pageFaults: BridgeErrorCapture[]
   frames: () => BridgeHostMessage[]
   last: () => BridgeHostMessage
 }
@@ -45,12 +48,14 @@ function harness(
     post?: (json: string) => Promise<void>
     route?: BridgeInitRoute
     onNavigate?: (href: string) => void
+    onPageFault?: (error: BridgeErrorCapture) => void
   } = {}
 ): Harness {
   const client = options.client ?? createFakeRpcClient()
   const posted: string[] = []
   const diagnostics: BridgeHostDiagnostic[] = []
   const navigations: string[] = []
+  const pageFaults: BridgeErrorCapture[] = []
   const host = createBridgeHost({
     client,
     post: (json) => {
@@ -62,6 +67,10 @@ function harness(
     route: options.route ?? ROUTE,
     pageRoutes: PAGE_ROUTES,
     onNavigate: options.onNavigate ?? ((href) => navigations.push(href)),
+    onPageFault: (error) => {
+      pageFaults.push(error)
+      options.onPageFault?.(error)
+    },
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic)
   })
   // Read back through the page's own reader: a frame the host sends that the page would refuse is
@@ -80,6 +89,7 @@ function harness(
     posted,
     diagnostics,
     navigations,
+    pageFaults,
     frames,
     last: () => {
       const all = frames()
@@ -125,7 +135,7 @@ describe('init and state', () => {
           maxSubscriptions: BRIDGE_MAX_SUBSCRIPTIONS
         },
         // What the shell will do for the page, and what makes its `navigate` frame acceptable.
-        native: ['navigate']
+        native: [BRIDGE_FAULT_GRANT, 'navigate']
       },
       route: ROUTE,
       pageRoutes: PAGE_ROUTES
@@ -711,6 +721,58 @@ describe('notifications, refusals and the fence', () => {
     )
     expect(bridge.client.foregroundCalls).toEqual([[], ['app-resume']])
     expect(bridge.client.viewports).toEqual([{ terminal: 't1', cols: 80, rows: 24 }])
+  })
+
+  it('hands a page fault to the session and asks the client for nothing', () => {
+    const bridge = harness()
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(bridge.pageFaults).toEqual([
+      { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+    ])
+    expect(bridge.client.requests).toHaveLength(0)
+    expect(bridge.client.foregroundCalls).toEqual([])
+    expect(bridge.diagnostics).toEqual([])
+  })
+
+  it('drops a page fault that arrives after the document said goodbye', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'close' }))
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: { category: 'Error', message: 'late', isRpcDeliveryUnknown: false }
+      })
+    )
+    expect(bridge.pageFaults).toEqual([])
+    expect(bridge.diagnostics).toEqual([{ kind: 'frame-after-close' }])
+  })
+
+  it('reports a listener that throws on a page fault once, and keeps reading', () => {
+    const failure = new Error('the session is gone')
+    const bridge = harness({
+      onPageFault: () => {
+        throw failure
+      }
+    })
+    const fault = clientFrame({
+      type: 'notify',
+      name: BRIDGE_FAULT_GRANT,
+      error: { category: 'Error', message: 'route threw', isRpcDeliveryUnknown: false }
+    })
+    // The page's frame arrives on a native event handler, and a throw that escapes this arm takes
+    // that handler down with it.
+    bridge.host.receive(fault)
+    bridge.host.receive(fault)
+    expect(bridge.diagnostics).toEqual([{ kind: 'notify-failed', error: failure }])
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    expect(bridge.last().type).toBe('init')
   })
 
   it('reports a refused frame and forwards nothing from it', () => {

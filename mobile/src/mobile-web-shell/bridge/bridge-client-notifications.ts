@@ -1,14 +1,23 @@
 import type { ForegroundNudgeReason } from '../../transport/types'
-import { BRIDGE_PROTOCOL_VERSION, type BridgeClientMessage } from './bridge-envelope'
+import {
+  BRIDGE_FAULT_GRANT,
+  BRIDGE_PROTOCOL_VERSION,
+  type BridgeClientMessage
+} from './bridge-envelope'
+import { captureBridgeError } from './bridge-error-capture'
 
 /**
  * Everything the page posts and hears nothing back about.
  *
- * All three share one guard, and it is not the same guard `sendRequest` uses. A call before `init`
- * is a mount-order bug and throws; a call after `close` is an unmounting screen posting one more
- * nudge on its way out, which the native clients answer inertly rather than by throwing into a
+ * Three of the four share one guard, and it is not the same guard `sendRequest` uses. A call before
+ * `init` is a mount-order bug and throws; a call after `close` is an unmounting screen posting one
+ * more nudge on its way out, which the native clients answer inertly rather than by throwing into a
  * teardown path nobody wrote a catch for. Nothing here returns a promise, so nothing here can be
  * awaited into a rejection either.
+ *
+ * `notifyPageFault` is the exception and reads the session instead of requiring it: its one caller
+ * is an error boundary, and a report that threw would replace the page's last word with an error
+ * nobody catches.
  */
 export type BridgeClientNotificationDeps = {
   /** False when the frame never left the page. */
@@ -27,6 +36,7 @@ export type BridgeClientNotifications = {
   ) => void
   notifyForeground: (reason?: ForegroundNudgeReason) => void
   notifyNavigate: (href: string) => boolean
+  notifyPageFault: (error: unknown) => boolean
 }
 
 export function createBridgeClientNotifications(
@@ -60,6 +70,17 @@ export function createBridgeClientNotifications(
     // the whole frame, and a tap handler needs to know that before it decides it has navigated.
     notifyNavigate: (href) =>
       deps.hasGrant('navigate') &&
-      post({ v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'navigate', href })
+      post({ v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'navigate', href }),
+    notifyPageFault: (error) => {
+      if (deps.isClosed() || !deps.hasGrant(BRIDGE_FAULT_GRANT)) {
+        return false
+      }
+      return deps.send({
+        v: BRIDGE_PROTOCOL_VERSION,
+        type: 'notify',
+        name: BRIDGE_FAULT_GRANT,
+        error: captureBridgeError(error)
+      })
+    }
   }
 }
