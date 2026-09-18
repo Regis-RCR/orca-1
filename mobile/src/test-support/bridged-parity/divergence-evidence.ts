@@ -19,11 +19,16 @@ export function refusedFrames(posted: readonly string[]): string[] {
 /**
  * The same frame with a `_meta` on its reply payload, which is the one field the page's reader
  * demands and the wire the page stands in for does not. Anything that is not a reply comes back
- * untouched, so this can sit on a whole lane.
+ * untouched, so this can sit on a whole lane. The type is what decides that and not the presence of
+ * a `payload`: an `event` carries one too, and the page reads it as `z.unknown()`, so stamping it
+ * would put a key in a subscription's bytes that no reader asked for and none would refuse.
  */
 export function withReplyMeta(json: string): string {
   const frame: unknown = JSON.parse(json)
   if (typeof frame !== 'object' || frame === null || !('payload' in frame)) {
+    return json
+  }
+  if (!('type' in frame) || frame.type !== 'reply') {
     return json
   }
   const payload = frame.payload

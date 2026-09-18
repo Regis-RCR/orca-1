@@ -68,6 +68,18 @@ describe('reading the refused frames back', () => {
     const end = JSON.stringify({ v: 1, type: 'end', id, reason: 'closed' })
     expect(withReplyMeta(end)).toBe(end)
   })
+
+  it('adds the field a reply payload is missing', () => {
+    const reply = JSON.stringify({ v: 1, type: 'reply', id, payload: { id: 'f', ok: true } })
+    expect(JSON.parse(withReplyMeta(reply)).payload._meta).toEqual({
+      runtimeId: 'counterfactual-runtime'
+    })
+  })
+
+  it('leaves an event payload alone, which carries a `payload` of its own', () => {
+    const event = JSON.stringify({ v: 1, type: 'event', id, seq: 0, payload: { chunk: 'a' } })
+    expect(withReplyMeta(event)).toBe(event)
+  })
 })
 
 describe('undoing the counterfactual', () => {
