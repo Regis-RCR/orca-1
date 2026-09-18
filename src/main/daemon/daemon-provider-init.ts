@@ -115,7 +115,7 @@ export async function initDaemonPtyProvider(
     }
   })
   let legacyAdapters: DaemonPtyAdapter[] = []
-  let legacyGenerationRegistry: DaemonLegacyGenerationRegistryEntry[] = []
+  let legacyGenerationRegistry: readonly DaemonLegacyGenerationRegistryEntry[] = []
   let routedAdapter: DaemonProvider = newAdapter
   try {
     // Why: the launcher's temporary pair closes only after this permanent pair is established, leaving no adoption gap.

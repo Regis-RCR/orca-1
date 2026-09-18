@@ -8,11 +8,25 @@ import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { PREVIOUS_DAEMON_PROTOCOL_VERSIONS } from './types'
 
+// Why: this bounds the ENTIRE registry build (every live generation, every session in
+// each), not a per-call budget -- one shared absolute deadline is threaded through
+// every listSessions/hasChildProcesses call below so a wedged legacy generation
+// cannot burn its own 30s REQUEST_TIMEOUT_MS per RPC, times up to 35 previous
+// protocol versions, on daemon-init's critical path ahead of installDaemonProvider().
+// Kept well under first-window-startup-services.ts's 60s fail-open so a stalled
+// legacy generation never eats the budget the CURRENT healthy daemon needs to install.
+const LEGACY_GENERATION_REGISTRY_BUILD_BUDGET_MS = 10_000
+
 /** One session discovered under a legacy (non-current) daemon generation. */
 export type DaemonLegacyGenerationSessionEntry = {
-  sessionId: string
-  /** True when the session's foreground process is not a bare shell (a build, an MCP server, etc). */
-  busy: boolean
+  readonly sessionId: string
+  /**
+   * True when the session's foreground process is not a bare shell (a build, an MCP
+   * server, etc). Below GET_FOREGROUND_PROCESS_PROTOCOL_VERSION (11) the host has no
+   * getForegroundProcess RPC, so this reads conservative-true with no RPC issued: a
+   * SAFE DEFAULT (never guess idle), not an accuracy claim about that generation.
+   */
+  readonly busy: boolean
 }
 
 /**
@@ -21,11 +35,11 @@ export type DaemonLegacyGenerationSessionEntry = {
  * retirement pass) consumes; it carries no mutation or teardown capability itself.
  */
 export type DaemonLegacyGenerationRegistryEntry = {
-  protocolVersion: number
+  readonly protocolVersion: number
   /** Null when the on-disk pid record could not be read or parsed for this generation. */
-  pid: number | null
-  socketPath: string
-  sessions: DaemonLegacyGenerationSessionEntry[]
+  readonly pid: number | null
+  readonly socketPath: string
+  readonly sessions: readonly DaemonLegacyGenerationSessionEntry[]
 }
 
 function legacyDaemonProcessMayBeAlive(runtimeDir: string, protocolVersion: number): boolean {
@@ -61,16 +75,20 @@ function readLegacyDaemonPid(runtimeDir: string, protocolVersion: number): numbe
 // Why: reuses the adapter's own listSessions()/hasChildProcesses() (no new RPC), the
 // same busy/idle read every other daemon-recovery call site already relies on. The
 // registry is best-effort diagnostic data, so an inventory failure degrades to an
-// empty session list instead of failing daemon startup.
+// empty session list instead of failing daemon startup. deadlineMs is the one shared
+// absolute deadline the whole registry build was given -- past it, remainingDaemonRequestTimeoutMs
+// collapses each further call's own budget toward zero rather than granting a fresh
+// REQUEST_TIMEOUT_MS, so a wedged generation degrades fast into the catch below.
 async function buildLegacyGenerationSessions(
-  adapter: DaemonPtyAdapter
+  adapter: DaemonPtyAdapter,
+  deadlineMs: number
 ): Promise<DaemonLegacyGenerationSessionEntry[]> {
   try {
-    const sessions = await adapter.listSessions()
+    const sessions = await adapter.listSessions({ deadlineMs })
     return await Promise.all(
       sessions.map(async (session) => ({
         sessionId: session.sessionId,
-        busy: await adapter.hasChildProcesses(session.sessionId)
+        busy: await adapter.hasChildProcesses(session.sessionId, { deadlineMs })
       }))
     )
   } catch {
@@ -79,12 +97,19 @@ async function buildLegacyGenerationSessions(
 }
 
 // Why: callers that own an isolated runtime namespace must keep discovery history out of app userData.
+// deadlineMs defaults to this call's own bounded budget (LEGACY_GENERATION_REGISTRY_BUILD_BUDGET_MS
+// from entry), and a caller with a tighter remaining startup budget of its own may pass an
+// earlier absolute deadline instead -- either way every generation below shares the SAME one.
 export async function createLegacyDaemonAdapters(
   runtimeDir: string,
-  historyPath = getHistoryDir()
+  historyPath = getHistoryDir(),
+  deadlineMs: number = Date.now() + LEGACY_GENERATION_REGISTRY_BUILD_BUDGET_MS
 ): Promise<{
   adapters: DaemonPtyAdapter[]
-  registry: DaemonLegacyGenerationRegistryEntry[]
+  // Why: readonly at the API boundary so a typed caller cannot mutate discovered
+  // PID/socket/session state in later reads -- the registry is diagnostic data, not
+  // a live handle like the adapters array beside it.
+  registry: readonly DaemonLegacyGenerationRegistryEntry[]
 }> {
   const adapters: DaemonPtyAdapter[] = []
   const registry: DaemonLegacyGenerationRegistryEntry[] = []
@@ -123,7 +148,7 @@ export async function createLegacyDaemonAdapters(
       protocolVersion,
       pid: readLegacyDaemonPid(runtimeDir, protocolVersion),
       socketPath,
-      sessions: await buildLegacyGenerationSessions(adapter)
+      sessions: await buildLegacyGenerationSessions(adapter, deadlineMs)
     })
   }
   return { adapters, registry }
