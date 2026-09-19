@@ -259,7 +259,29 @@ export function useWorktreeJumpPaletteSelectionActions({
       handleSelectWorktree
     ]
   )
-  return { handleSelectItem }
+  // Pin toggles are a second entry point into the same pinTab/unpinTab/
+  // setWorktreesPinnedAndReveal store actions the tab-strip menu and sidebar already
+  // use (TabBar.tsx togglePinned, use-worktree-context-menu-commands.ts handleTogglePin).
+  const pinTab = useAppStore((s) => s.pinTab)
+  const unpinTab = useAppStore((s) => s.unpinTab)
+  const setWorktreesPinnedAndReveal = useAppStore((s) => s.setWorktreesPinnedAndReveal)
+  const handleToggleWorkspaceTabPinned = useCallback(
+    (tabId: string, isPinned: boolean) => {
+      if (isPinned) {
+        unpinTab(tabId)
+      } else {
+        pinTab(tabId)
+      }
+    },
+    [pinTab, unpinTab]
+  )
+  const handleToggleWorktreePinned = useCallback(
+    (worktreeId: string, isPinned: boolean) => {
+      setWorktreesPinnedAndReveal([worktreeId], !isPinned)
+    },
+    [setWorktreesPinnedAndReveal]
+  )
+  return { handleSelectItem, handleToggleWorkspaceTabPinned, handleToggleWorktreePinned }
 }
 
 export type WorktreeJumpPaletteSelectionActions = ReturnType<
