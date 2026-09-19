@@ -12,6 +12,7 @@ import type { WorktreeJumpPaletteSelectionLifecycle } from './use-worktree-jump-
 const storeMock = vi.hoisted(() => ({
   pinTab: vi.fn(),
   unpinTab: vi.fn(),
+  pinFile: vi.fn(),
   setWorktreesPinnedAndReveal: vi.fn()
 }))
 
@@ -21,6 +22,7 @@ vi.mock('@/store', () => ({
       selector({
         pinTab: storeMock.pinTab,
         unpinTab: storeMock.unpinTab,
+        pinFile: storeMock.pinFile,
         setWorktreesPinnedAndReveal: storeMock.setWorktreesPinnedAndReveal
       }),
     {
@@ -67,6 +69,7 @@ function Harness(): null {
 beforeEach(() => {
   storeMock.pinTab.mockReset()
   storeMock.unpinTab.mockReset()
+  storeMock.pinFile.mockReset()
   storeMock.setWorktreesPinnedAndReveal.mockReset()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -83,17 +86,35 @@ afterEach(() => {
 })
 
 describe('useWorktreeJumpPaletteSelectionActions pin toggles', () => {
-  it('calls the real pinTab store action when toggling an unpinned workspace tab', () => {
-    latest?.handleToggleWorkspaceTabPinned('tab-1', false)
+  it('calls the real pinTab store action when toggling an unpinned terminal tab', () => {
+    latest?.handleToggleWorkspaceTabPinned('tab-1', false, 'term-1', 'terminal')
 
     expect(storeMock.pinTab).toHaveBeenCalledWith('tab-1')
     expect(storeMock.unpinTab).not.toHaveBeenCalled()
+    expect(storeMock.pinFile).not.toHaveBeenCalled()
   })
 
-  it('calls the real unpinTab store action when toggling a pinned workspace tab', () => {
-    latest?.handleToggleWorkspaceTabPinned('tab-1', true)
+  it('calls the real unpinTab store action when toggling a pinned terminal tab', () => {
+    latest?.handleToggleWorkspaceTabPinned('tab-1', true, 'term-1', 'terminal')
 
     expect(storeMock.unpinTab).toHaveBeenCalledWith('tab-1')
+    expect(storeMock.pinTab).not.toHaveBeenCalled()
+    expect(storeMock.pinFile).not.toHaveBeenCalled()
+  })
+
+  it('calls pinFile (not bare pinTab) when pinning an unpinned editor tab, matching TabBar.tsx', () => {
+    latest?.handleToggleWorkspaceTabPinned('tab-2', false, 'file-1', 'editor')
+
+    expect(storeMock.pinFile).toHaveBeenCalledWith('file-1', 'tab-2')
+    expect(storeMock.pinTab).not.toHaveBeenCalled()
+    expect(storeMock.unpinTab).not.toHaveBeenCalled()
+  })
+
+  it('still calls plain unpinTab when unpinning a pinned editor tab', () => {
+    latest?.handleToggleWorkspaceTabPinned('tab-2', true, 'file-1', 'editor')
+
+    expect(storeMock.unpinTab).toHaveBeenCalledWith('tab-2')
+    expect(storeMock.pinFile).not.toHaveBeenCalled()
     expect(storeMock.pinTab).not.toHaveBeenCalled()
   })
 

@@ -151,7 +151,12 @@ describe('WorktreeJumpPaletteWorkspaceTabRow pin toggle', () => {
       getPinToggle(container).click()
     })
 
-    expect(controller.handleToggleWorkspaceTabPinned).toHaveBeenCalledWith('tab-42', false)
+    expect(controller.handleToggleWorkspaceTabPinned).toHaveBeenCalledWith(
+      'tab-42',
+      false,
+      'term-1',
+      'terminal'
+    )
     expect(controller.handleSelectItem).not.toHaveBeenCalled()
   })
 
@@ -165,5 +170,43 @@ describe('WorktreeJumpPaletteWorkspaceTabRow pin toggle', () => {
     })
 
     expect(controller.handleSelectItem).toHaveBeenCalledWith(entry)
+  })
+
+  it('does not open the tab when Enter is pressed while the pin toggle has focus', () => {
+    const { container, controller } = renderRow()
+    const toggle = getPinToggle(container)
+
+    act(() => {
+      toggle.focus()
+      toggle.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      )
+    })
+
+    expect(controller.handleSelectItem).not.toHaveBeenCalled()
+  })
+
+  it('still lets arrow-key palette navigation bubble while the pin toggle has focus', () => {
+    const { container } = renderRow()
+    const toggle = getPinToggle(container)
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true
+    })
+    const stopPropagationSpy = vi.spyOn(event, 'stopPropagation')
+
+    act(() => {
+      toggle.focus()
+      toggle.dispatchEvent(event)
+    })
+
+    // React's SyntheticEvent.stopPropagation() delegates to the native event's own
+    // stopPropagation(), so spying on the dispatched native event directly observes
+    // whether the row's onKeyDown handler swallowed it. A listener further up the DOM
+    // (e.g. on the React root's own mount node) cannot: React delivers every handler
+    // in the tree through ONE delegated listener at that same node, so native bubbling
+    // already reached it before any in-tree stopPropagation() call could matter.
+    expect(stopPropagationSpy).not.toHaveBeenCalled()
   })
 })

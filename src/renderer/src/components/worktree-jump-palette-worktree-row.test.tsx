@@ -180,4 +180,38 @@ describe('WorktreeJumpPaletteWorktreeRow pin toggle', () => {
 
     expect(controller.handleSelectItem).toHaveBeenCalledWith(entry)
   })
+
+  it('does not select the worktree when Enter is pressed while the pin toggle has focus', () => {
+    const { container, controller } = renderRow()
+    const toggle = getPinToggle(container)
+
+    act(() => {
+      toggle.focus()
+      toggle.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+      )
+    })
+
+    expect(controller.handleSelectItem).not.toHaveBeenCalled()
+  })
+
+  it('still lets arrow-key palette navigation bubble while the pin toggle has focus', () => {
+    const { container } = renderRow()
+    const toggle = getPinToggle(container)
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true
+    })
+    const stopPropagationSpy = vi.spyOn(event, 'stopPropagation')
+
+    act(() => {
+      toggle.focus()
+      toggle.dispatchEvent(event)
+    })
+
+    // See the sibling test in worktree-jump-palette-workspace-tab-row.test.tsx for why
+    // this spies on the dispatched native event rather than a DOM-ancestor listener.
+    expect(stopPropagationSpy).not.toHaveBeenCalled()
+  })
 })

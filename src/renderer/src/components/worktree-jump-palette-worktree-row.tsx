@@ -69,6 +69,14 @@ export function WorktreeJumpPaletteWorktreeRow({
     event.preventDefault()
     event.stopPropagation()
   }
+  // Stop only the activation keys from reaching cmdk's root Enter handler (which
+  // would otherwise select this row regardless of DOM focus); arrow/Home/End keys
+  // must still bubble so palette keyboard navigation keeps working from this button.
+  const stopActivationKeyPropagation = (event: React.KeyboardEvent): void => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.stopPropagation()
+    }
+  }
 
   return (
     <CommandItem
@@ -174,6 +182,7 @@ export function WorktreeJumpPaletteWorktreeRow({
                 worktree.isPinned && 'opacity-100 text-foreground'
               )}
               onPointerDown={stopRowSelect}
+              onKeyDown={stopActivationKeyPropagation}
               onClick={(event) => {
                 stopRowSelect(event)
                 controller.handleToggleWorktreePinned(worktree.id, worktree.isPinned)
