@@ -3,6 +3,13 @@ import { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import { registerWorktreeChangeInvalidator } from '../ipc/worktree-change-invalidators'
 import { registerDetectedWorktreeScanInvalidation } from '../ipc/worktrees/listing/register-detected-worktree-scan-invalidation'
+import type { TerminalComposerState } from '../../shared/terminal-composer-draft'
+import {
+  readTerminalCommandComposer,
+  resolveTerminalCommandTarget,
+  type TerminalCommandTarget,
+  type TerminalCommandTargetHost
+} from './terminal-command-target'
 
 class OrcaRuntimeService extends OrcaRuntimeWithResolveWaiter {
   constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithResolveWaiter>) {
@@ -12,6 +19,26 @@ class OrcaRuntimeService extends OrcaRuntimeWithResolveWaiter {
     // module registers the generation bump at load; a headless host never loads it.
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
+  }
+
+  /** Target identity behind `terminal.command`: PTY, agent, self-send and receipt source. */
+  getTerminalCommandTarget(handle: string, callerHandle?: string): TerminalCommandTarget {
+    return resolveTerminalCommandTarget(this.terminalCommandHost(), handle, callerHandle)
+  }
+
+  /** Three-state composer read of a live pane for `terminal.command`. */
+  readTerminalCommandComposer(ptyId: string): TerminalComposerState {
+    return readTerminalCommandComposer(this.terminalCommandHost(), ptyId)
+  }
+
+  private terminalCommandHost(): TerminalCommandTargetHost {
+    return {
+      getTerminalAgentStatusPtyId: (handle) => this.getTerminalAgentStatusPtyId(handle),
+      getPtyAgent: (ptyId) => this.getPtyAgent(ptyId),
+      headlessTerminals: this.headlessTerminals,
+      getExactWorkerProviderSession: (handle, observedAfter) =>
+        this.getExactWorkerProviderSession(handle, observedAfter)
+    }
   }
 }
 type OrcaRuntimeServiceExport = RuntimeCommandSurfaceHost<OrcaRuntimeService>

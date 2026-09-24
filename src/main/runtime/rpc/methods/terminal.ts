@@ -1,3 +1,4 @@
+import { TERMINAL_COMMAND_METHODS } from './terminal/terminal-command-method'
 import { TERMINAL_LIFECYCLE_METHODS } from './terminal/terminal-lifecycle-methods'
 import { TERMINAL_MULTIPLEX_METHODS } from './terminal/terminal-multiplex-method'
 import { TERMINAL_QUERY_METHODS } from './terminal/terminal-query-methods'
@@ -17,5 +18,7 @@ export const TERMINAL_METHODS = [
   ...TERMINAL_VIEWPORT_METHODS_BEFORE_STREAMS,
   ...TERMINAL_MULTIPLEX_METHODS,
   ...TERMINAL_SUBSCRIBE_METHODS,
-  ...TERMINAL_VIEWPORT_METHODS_AFTER_STREAMS
+  ...TERMINAL_VIEWPORT_METHODS_AFTER_STREAMS,
+  // Appended last: the manifest order above is released contract.
+  ...TERMINAL_COMMAND_METHODS
 ]

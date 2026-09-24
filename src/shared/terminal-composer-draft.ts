@@ -101,7 +101,8 @@ function isStockPlaceholder(
 }
 
 function detectTerminalComposer(
-  context: TerminalCursorContext | null | undefined
+  context: TerminalCursorContext | null | undefined,
+  allowEmpty = false
 ): TerminalComposerMatch | null {
   if (!context || context.cursorHidden || context.rows.length === 0) {
     return null
@@ -158,7 +159,7 @@ function detectTerminalComposer(
         .join('')
         .trim()
       if (!text) {
-        if (!placeholder) {
+        if (!placeholder && !allowEmpty) {
           return null
         }
       }
@@ -198,4 +199,27 @@ export function hasTerminalComposerPlaceholder(
   context: TerminalCursorContext | null | undefined
 ): boolean {
   return detectTerminalComposer(context)?.placeholder === true
+}
+
+export type TerminalComposerState =
+  | { state: 'empty' }
+  | { state: 'text'; text: string }
+  | { state: 'unobservable' }
+
+/**
+ * Three-state read of the composer. `detectTerminalComposerDraft` returns null both for an empty
+ * composer and for one it cannot find; a caller deciding whether an Enter is safe must tell the
+ * two apart, so an unfound prompt reads `unobservable`, never `empty`.
+ */
+export function readTerminalComposerState(
+  context: TerminalCursorContext | null | undefined
+): TerminalComposerState {
+  const match = detectTerminalComposer(context, true)
+  if (!match) {
+    return { state: 'unobservable' }
+  }
+  if (match.placeholder || !match.text) {
+    return { state: 'empty' }
+  }
+  return { state: 'text', text: match.text }
 }

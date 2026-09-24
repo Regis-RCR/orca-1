@@ -132,6 +132,17 @@ export const TerminalSend = TerminalHandle.extend({
   claimViewport: z.literal(true).optional()
 })
 
+// Why: a slash command is raw bytes plus a guarded Enter; it never takes the agent-prompt paste path.
+export const TerminalCommand = TerminalHandle.extend({
+  command: requiredString('Missing --command'),
+  args: z.string().optional(),
+  requireDraft: z.literal(true).optional(),
+  // Why: waiting only observes the receipt; it never authorizes a second write.
+  waitReceiptMs: z.number().int().min(0).max(3_600_000).optional(),
+  // The caller's own handle, so the runtime can tell a self-send from a send to another pane.
+  callerTerminal: OptionalString
+})
+
 export const TerminalViewport = z.object({
   cols: z.number().int().min(1).max(1000),
   rows: z.number().int().min(1).max(500)

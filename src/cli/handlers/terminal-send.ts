@@ -14,7 +14,15 @@ export const terminalSendHandler: CommandHandler = async ({ flags, client, cwd, 
   const text = getOptionalStringFlag(flags, 'text')
   const enter = flags.get('enter') === true
   const interrupt = flags.get('interrupt') === true
-  const promptCandidate = !!text && enter && !interrupt
+  const guarded = flags.get('guarded') === true
+  if (guarded && text && (enter || interrupt)) {
+    // Why: the runtime refuses a combined guarded payload; say so before any call instead of a bare refusal.
+    throw new RuntimeClientError(
+      'invalid_argument',
+      '--guarded sends are two-phase: send --text in one call, then a bare --enter in another, each with --guarded.'
+    )
+  }
+  const promptCandidate = !!text && enter && !interrupt && !guarded
   const retryRequest = readRetryRequestFlag(flags)
   const waitSubmitSeconds = getOptionalPositiveIntegerFlag(flags, 'wait-submit')
   if ((retryRequest || waitSubmitSeconds) && !promptCandidate) {
@@ -59,6 +67,7 @@ export const terminalSendHandler: CommandHandler = async ({ flags, client, cwd, 
     text,
     enter,
     interrupt,
+    ...(guarded ? { requireAgentStatus: 'sendable' as const } : {}),
     ...(promptCandidate
       ? {
           agentPrompt: true as const,
