@@ -114,7 +114,7 @@ export async function runTerminalCommandSequence(
       'The composer could not be read before the first write; no input was sent.'
     )
   }
-  const receiptSourceReadable = deps.receipt ? await deps.receipt.start() : false
+  const receiptSourceReadable = deps.receipt ? await deps.receipt.start().catch(() => false) : false
 
   const chunks: { kind: RuntimeTerminalCommandWrite['kind']; data: string; expected: string }[] = [
     {
@@ -130,61 +130,87 @@ export async function runTerminalCommandSequence(
       expected: buildTerminalCommandExpectedText(input.name, input.args)
     })
   }
-  for (const [index, chunk] of chunks.entries()) {
-    if (index > 0) {
-      const guard = await deps.checkGuards()
-      if (!guard.ok) {
-        return refuse(guard.code, `${guard.message} The Enter was withheld.`)
+  // Why: once a byte is written, any thrown read or write must still report the staged text,
+  // so it becomes a refusal carrying the partial-write state instead of a transport error.
+  const submit = async (): Promise<RuntimeTerminalCommand | null> => {
+    for (const [index, chunk] of chunks.entries()) {
+      if (index > 0) {
+        const guard = await deps.checkGuards()
+        if (!guard.ok) {
+          return refuse(guard.code, `${guard.message} The Enter was withheld.`)
+        }
       }
+      const accepted = await deps.write(chunk.data)
+      if (!accepted) {
+        if (result.bytesWritten === 0) {
+          throw new Error('terminal_not_writable')
+        }
+        return refuse(
+          'agent_status_unknown',
+          'The terminal stopped accepting input mid-sequence; the Enter was withheld.'
+        )
+      }
+      const bytes = Buffer.byteLength(chunk.data, 'utf8')
+      writes.push({ kind: chunk.kind, bytes })
+      result.bytesWritten += bytes
+      await settle(deps, chunk.expected)
     }
-    const accepted = await deps.write(chunk.data)
-    if (!accepted) {
-      if (result.bytesWritten === 0) {
-        throw new Error('terminal_not_writable')
-      }
+
+    const guard = await deps.checkGuards()
+    if (!guard.ok) {
+      return refuse(guard.code, `${guard.message} The Enter was withheld.`)
+    }
+    const expected = chunks.at(-1)!.expected
+    const draftCheck: TerminalCommandDraftCheck = compareTerminalCommandDraft(
+      draftOf(await deps.readComposer()),
+      expected
+    )
+    result.draftCheck = draftCheck
+    if (draftCheck === 'mismatch') {
       return refuse(
-        'agent_status_unknown',
-        'The terminal stopped accepting input mid-sequence; the Enter was withheld.'
+        'composer_not_empty',
+        'The composer does not read back the typed command; the Enter was withheld.'
       )
     }
-    const bytes = Buffer.byteLength(chunk.data, 'utf8')
-    writes.push({ kind: chunk.kind, bytes })
-    result.bytesWritten += bytes
-    await settle(deps, chunk.expected)
+    if (draftCheck === 'unobservable' && input.requireDraft) {
+      return refuse(
+        'composer_not_observable',
+        'The composer could not be read back and --require-draft is set; the Enter was withheld.'
+      )
+    }
+    if (!(await deps.write('\r'))) {
+      return refuse(
+        'agent_status_unknown',
+        'The terminal stopped accepting input before the Enter; the Enter was not written.'
+      )
+    }
+    writes.push({ kind: 'submit', bytes: 1 })
+    result.bytesWritten += 1
+    return null
   }
-
-  const guard = await deps.checkGuards()
-  if (!guard.ok) {
-    return refuse(guard.code, `${guard.message} The Enter was withheld.`)
-  }
-  const expected = chunks.at(-1)!.expected
-  const draftCheck: TerminalCommandDraftCheck = compareTerminalCommandDraft(
-    draftOf(await deps.readComposer()),
-    expected
-  )
-  result.draftCheck = draftCheck
-  if (draftCheck === 'mismatch') {
-    return refuse(
-      'composer_not_empty',
-      'The composer does not read back the typed command; the Enter was withheld.'
-    )
-  }
-  if (draftCheck === 'unobservable' && input.requireDraft) {
-    return refuse(
-      'composer_not_observable',
-      'The composer could not be read back and --require-draft is set; the Enter was withheld.'
-    )
-  }
-  if (!(await deps.write('\r'))) {
+  let withheld: RuntimeTerminalCommand | null
+  try {
+    withheld = await submit()
+  } catch (error) {
+    if (result.bytesWritten === 0) {
+      throw error
+    }
+    const detail = error instanceof Error ? error.message : String(error)
     return refuse(
       'agent_status_unknown',
-      'The terminal stopped accepting input before the Enter; the Enter was not written.'
+      `${detail} after input was written; the Enter was withheld.`
     )
   }
-  writes.push({ kind: 'submit', bytes: 1 })
-  result.bytesWritten += 1
+  if (withheld) {
+    return withheld
+  }
 
-  result.receipt = await observeReceipt(input, deps, receiptSourceReadable)
+  try {
+    result.receipt = await observeReceipt(input, deps, receiptSourceReadable)
+  } catch {
+    // The Enter is written; a failed receipt read is unverifiable, never a failed send.
+    result.receipt = { stage: 'unverifiable', source: 'transcript' }
+  }
   return result
 }
 

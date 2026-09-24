@@ -142,7 +142,29 @@ describe('readClaudeTranscriptSince', () => {
     const offset = await statClaudeTranscriptSize(path)
     expect(offset).toBe(7)
     await appendFile(path, 'first\nsecond\npartial')
-    expect(await readClaudeTranscriptSince(path, offset!)).toEqual(['first', 'second'])
+    expect(await readClaudeTranscriptSince(path, offset!)).toEqual({
+      lines: ['first', 'second'],
+      consumed: 13
+    })
+  })
+
+  it('counts consumed bytes, not characters, so the next read starts on a line boundary', async () => {
+    const path = join(dir, 'session.jsonl')
+    await writeFile(path, 'é\n')
+    const first = await readClaudeTranscriptSince(path, 0)
+    expect(first).toEqual({ lines: ['é'], consumed: 3 })
+    await appendFile(path, 'next\n')
+    expect(await readClaudeTranscriptSince(path, first!.consumed)).toEqual({
+      lines: ['next'],
+      consumed: 5
+    })
+  })
+
+  it('moves past a line longer than the read bound instead of stalling on it', async () => {
+    const path = join(dir, 'session.jsonl')
+    await writeFile(path, 'x'.repeat(64))
+    expect(await readClaudeTranscriptSince(path, 0, 16)).toEqual({ lines: [], consumed: 16 })
+    expect(await readClaudeTranscriptSince(path, 0)).toEqual({ lines: [], consumed: 0 })
   })
 
   it('reads an unreadable transcript as null, never as an empty success', async () => {

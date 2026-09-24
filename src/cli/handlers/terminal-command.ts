@@ -25,7 +25,15 @@ async function readArgs(flags: Map<string, string | boolean>): Promise<string | 
     throw new RuntimeClientError('invalid_argument', 'Pass --args or --args-file, not both.')
   }
   // Why: `--text " $(cat file)"` strips the final newline; the file is read byte for byte.
-  const args = file !== undefined ? await readFile(file, 'utf8') : inline
+  let args = inline
+  if (file !== undefined) {
+    try {
+      args = await readFile(file, 'utf8')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new RuntimeClientError('invalid_argument', `Could not read --args-file: ${detail}`)
+    }
+  }
   if (args !== undefined && !validateTerminalCommandArgs(args)) {
     throw new RuntimeClientError(
       'invalid_argument',
@@ -79,10 +87,13 @@ export const terminalCommandHandler: CommandHandler = async ({ flags, client, cw
   }
   const waitReceiptMs = waitReceiptSeconds ? waitReceiptSeconds * 1000 : 0
   const status = await client.getCliStatus()
-  if (
-    !status.result.runtime.reachable ||
-    status.result.runtime.capabilities?.includes(TERMINAL_COMMAND_RUNTIME_CAPABILITY) !== true
-  ) {
+  if (!status.result.runtime.reachable) {
+    throw new RuntimeClientError(
+      'runtime_unavailable',
+      'Orca could not verify terminal command support, so no input was sent. Wait for the execution host to become reachable and retry.'
+    )
+  }
+  if (status.result.runtime.capabilities?.includes(TERMINAL_COMMAND_RUNTIME_CAPABILITY) !== true) {
     throw new RuntimeClientError(
       'incompatible_runtime',
       'This Orca host does not support terminal command. No input was sent; update Orca on the execution host. The verb never falls back to unguarded writes.'

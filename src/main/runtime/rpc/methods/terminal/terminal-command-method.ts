@@ -136,10 +136,13 @@ export const TERMINAL_COMMAND_METHODS = [
                   if (offset === null) {
                     return null
                   }
-                  const lines = await readClaudeTranscriptSince(source.transcriptPath, offset)
-                  return lines === null
-                    ? null
-                    : parseClaudeCommandReceipt(lines, name, source.sessionIds)
+                  const read = await readClaudeTranscriptSince(source.transcriptPath, offset)
+                  if (read === null) {
+                    return null
+                  }
+                  // Each poll reads only new bytes; the sequence keeps the best stage across polls.
+                  offset += read.consumed
+                  return parseClaudeCommandReceipt(read.lines, name, source.sessionIds)
                 }
               }
             }

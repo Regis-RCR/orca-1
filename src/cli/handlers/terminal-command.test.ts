@@ -171,6 +171,37 @@ describe('terminal command CLI', () => {
     expect(commandCalls(call)).toEqual([])
   })
 
+  it('refuses an unreadable --args-file with invalid_argument and no RPC call', async () => {
+    const { call, client: c } = client({})
+    await expect(
+      run(
+        [
+          ['command', 'goal'],
+          ['args-file', join(dir, 'missing.md')]
+        ],
+        c
+      )
+    ).rejects.toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('ENOENT')
+    })
+    expect(call).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unreachable host with runtime_unavailable, not incompatible_runtime', async () => {
+    const call = vi.fn()
+    const c = {
+      call,
+      getCliStatus: vi.fn().mockResolvedValue({
+        result: { runtime: { reachable: false, runtimeId: null, capabilities: [] } }
+      })
+    } as unknown as RuntimeClient
+    await expect(run([['command', 'compact']], c)).rejects.toMatchObject({
+      code: 'runtime_unavailable'
+    })
+    expect(call).not.toHaveBeenCalled()
+  })
+
   it('refuses an older host with incompatible_runtime and writes nothing', async () => {
     const { call, client: c } = client({ capable: false })
     await expect(run([['command', 'compact']], c)).rejects.toMatchObject({

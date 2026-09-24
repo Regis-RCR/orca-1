@@ -120,34 +120,39 @@ export async function statClaudeTranscriptSize(path: string): Promise<number | n
 }
 
 /**
- * Complete lines appended after `offset`. A trailing line without its newline is still being
- * written and is left for the next poll. Null means unreadable, which a caller reports as
- * `unverifiable`, never as "nothing happened".
+ * Complete lines appended after `offset`, and the bytes they consumed, so the next poll starts
+ * where this one stopped. A trailing line without its newline is still being written and is left
+ * for the next poll. Null means unreadable, which a caller reports as `unverifiable`, never as
+ * "nothing happened".
  */
 export async function readClaudeTranscriptSince(
   path: string,
-  offset: number
-): Promise<string[] | null> {
+  offset: number,
+  maxBytes = MAX_RECEIPT_READ_BYTES
+): Promise<{ lines: string[]; consumed: number } | null> {
   const opened = await openRegularTranscript(path)
   if (!opened) {
     return null
   }
   try {
-    const length = Math.min(Math.max(0, opened.size - offset), MAX_RECEIPT_READ_BYTES)
+    const length = Math.min(Math.max(0, opened.size - offset), maxBytes)
     if (length === 0) {
-      return []
+      return { lines: [], consumed: 0 }
     }
     const buffer = Buffer.alloc(length)
     const { bytesRead } = await opened.handle.read(buffer, 0, length, offset)
-    const text = buffer.subarray(0, bytesRead).toString('utf8')
-    const lastNewline = text.lastIndexOf('\n')
+    const lastNewline = buffer.subarray(0, bytesRead).lastIndexOf(0x0a)
     if (lastNewline === -1) {
-      return []
+      // Why: a line longer than the bound would otherwise pin every later poll to this offset.
+      // No receipt record is that long, so skipping the fragment loses nothing a poll looks for.
+      return { lines: [], consumed: bytesRead === maxBytes ? bytesRead : 0 }
     }
-    return text
-      .slice(0, lastNewline)
+    const lines = buffer
+      .subarray(0, lastNewline)
+      .toString('utf8')
       .split('\n')
       .filter((entry) => entry.length > 0)
+    return { lines, consumed: lastNewline + 1 }
   } catch {
     return null
   } finally {

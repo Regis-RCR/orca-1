@@ -1,3 +1,6 @@
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../../orca-runtime'
 import type { TerminalComposerState } from '../../../../../shared/terminal-composer-draft'
@@ -10,12 +13,15 @@ type FakeOptions = {
   status?: RuntimeTerminalAgentStatusState
   wait?: { source: string } | null | undefined
   composer?: TerminalComposerState[]
+  receiptSource?: { transcriptPath: string; sessionIds: Set<string> }
+  onWrite?: (action: { text?: string; enter?: boolean }) => void
 }
 
 function fakeRuntime(options: FakeOptions) {
   const composer = [...(options.composer ?? [{ state: 'empty' as const }])]
   const sendTerminal = vi.fn(
     async (_handle: string, action: { text?: string; enter?: boolean }) => {
+      options.onWrite?.(action)
       return { handle: 'term', accepted: true, bytesWritten: action.text?.length ?? 1 }
     }
   )
@@ -24,7 +30,7 @@ function fakeRuntime(options: FakeOptions) {
       ptyId: 'pty-1',
       agent: options.agent === undefined ? 'claude' : options.agent,
       selfTarget: false,
-      receiptSource: null
+      receiptSource: options.receiptSource ?? null
     }),
     readTerminalCommandComposer: () =>
       composer.length > 1 ? composer.shift()! : (composer[0] ?? { state: 'unobservable' }),
@@ -100,6 +106,43 @@ describe('terminal.command RPC method', () => {
     const { command } = await invoke({ terminal: 'term', command: 'compact' }, runtime)
     expect(command.refusal?.code).toBe('composer_not_empty')
     expect(sendTerminal).not.toHaveBeenCalled()
+  })
+
+  it('advances the transcript offset per poll, so a record past the read bound is still seen', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orca-command-method-'))
+    try {
+      const transcriptPath = join(dir, 'session.jsonl')
+      writeFileSync(transcriptPath, '')
+      const { runtime } = fakeRuntime({
+        composer: [
+          { state: 'empty' },
+          { state: 'text', text: '/rename' },
+          { state: 'text', text: '/rename w-1' }
+        ],
+        receiptSource: { transcriptPath, sessionIds: new Set(['sess']) },
+        onWrite: (action) => {
+          if (action.enter) {
+            // More than the 4 MiB one poll reads, then the record that proves execution.
+            appendFileSync(transcriptPath, `${'x'.repeat(1023)}\n`.repeat(5 * 1024))
+            appendFileSync(
+              transcriptPath,
+              `${JSON.stringify({ type: 'custom-title', customTitle: 'w-1', sessionId: 'sess' })}\n`
+            )
+          }
+        }
+      })
+      const result = await invoke(
+        { terminal: 'term', command: 'rename', args: 'w-1', waitReceiptMs: 3_000 },
+        runtime
+      )
+      expect((result.command as { receipt?: unknown }).receipt).toEqual({
+        stage: 'executed',
+        source: 'transcript',
+        record: 'custom-title'
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('revalidates the name and args on the host', async () => {

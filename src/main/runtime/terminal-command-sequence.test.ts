@@ -277,6 +277,60 @@ describe('runTerminalCommandSequence', () => {
     expect(result.refusal?.code).toBe('agent_status_unknown')
   })
 
+  it('keeps the staged-text state when a guard read throws after a write', async () => {
+    const h = harness({})
+    let calls = 0
+    const deps = {
+      ...h.deps,
+      checkGuards: async () => {
+        calls += 1
+        if (calls > 1) {
+          throw new Error('terminal_guard_not_writable')
+        }
+        return SENDABLE
+      }
+    }
+    const result = await runTerminalCommandSequence(input(), deps)
+    expect(h.writes).toEqual(['/compact'])
+    expect(result.stagedText).toBe(true)
+    expect(result.refusal?.code).toBe('agent_status_unknown')
+    expect(result.refusal?.message).toContain('terminal_guard_not_writable')
+  })
+
+  it('keeps the staged-text state when a later write throws', async () => {
+    const h = harness({})
+    const deps = {
+      ...h.deps,
+      write: async (data: string) => {
+        if (data !== '/goal') {
+          throw new Error('terminal_not_writable')
+        }
+        return h.deps.write(data)
+      }
+    }
+    const result = await runTerminalCommandSequence(input({ name: 'goal', args: 'x' }), deps)
+    expect(h.writes).toEqual(['/goal'])
+    expect(result.stagedText).toBe(true)
+    expect(result.refusal?.code).toBe('agent_status_unknown')
+  })
+
+  it('reports the Enter as sent when the receipt read throws afterwards', async () => {
+    const h = harness({})
+    const deps = {
+      ...h.deps,
+      receipt: {
+        start: async () => true,
+        poll: async (): Promise<TerminalCommandReceiptReading | null> => {
+          throw new Error('EIO')
+        }
+      }
+    }
+    const result = await runTerminalCommandSequence(input(), deps)
+    expect(h.writes).toEqual(['/compact', '\r'])
+    expect(result.refusal).toBeUndefined()
+    expect(result.receipt).toEqual({ stage: 'unverifiable', source: 'transcript' })
+  })
+
   it('throws, writing nothing, when the terminal refuses the first write', async () => {
     const h = harness({ writeAccepted: () => false })
     await expect(runTerminalCommandSequence(input(), h.deps)).rejects.toThrow(
