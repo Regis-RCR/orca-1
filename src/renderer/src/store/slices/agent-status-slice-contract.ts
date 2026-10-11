@@ -27,6 +27,7 @@ import type {
   ProgramStatusMirrorRecord,
   ProgramStatusPaneIpcPayload
 } from '../../../../shared/program-status/program-status-pane-payload'
+import type { ProgramStatusPendingHides } from '../../../../shared/program-status/program-status-pending-hide'
 import type {
   ResumableTuiAgent,
   SleepingAgentLaunchConfig,
@@ -78,6 +79,14 @@ export type AgentStatusSlice = {
   setProgramStatusPreferred: (preferred: boolean) => void
   /** Hide this pane's visible slot and acknowledge it to main; a no-op without one. */
   acknowledgeProgramStatusForPane: (paneKey: string) => void
+  /** Dismissals not yet sent to main, by operation id, each bound to its PTY's hidden view. */
+  programStatusPendingHides: ProgramStatusPendingHides
+  /** The local half alone: hide the visible slot as a new operation and return its id, else null. */
+  hideProgramStatusForPane: (paneKey: string) => string | null
+  /** Undo that operation; a no-op once it is committed or its PTY moved on. */
+  revealProgramStatusForPane: (operationId: string) => void
+  /** Send that operation's ack to main once a pane shows the exact view it hid. */
+  commitProgramStatusHide: (operationId: string) => void
 
   retireAgentPaneAuthority: (
     paneKey: string,

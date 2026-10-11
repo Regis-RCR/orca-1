@@ -6,6 +6,7 @@ import {
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { createWorktreeAgentFreshnessSelector } from './worktree-agent-freshness-selector'
+import { NO_PROGRAM_STATUS } from '@/store/selectors/composed-agent-status.test-support'
 
 const WT_1_PANE = makePaneKey('tab-1', '11111111-1111-4111-8111-111111111111')
 const WT_2_PANE = makePaneKey('tab-2', '22222222-2222-4222-8222-222222222222')
@@ -48,7 +49,8 @@ function makeState(agentStatusEpoch: number, wt1UpdatedAt: number, wt2UpdatedAt:
       [WT_2_PANE]: makeEntry(WT_2_PANE, 'wt-2', wt2UpdatedAt)
     },
     migrationUnsupportedByPtyId: {},
-    retainedAgentsByPaneKey: {}
+    retainedAgentsByPaneKey: {},
+    ...NO_PROGRAM_STATUS
   }
 }
 

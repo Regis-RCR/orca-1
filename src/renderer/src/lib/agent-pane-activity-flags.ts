@@ -42,7 +42,8 @@ export function applyAgentPaneActivityFlags(
     } else {
       flags.hasLiveWorking = true
     }
-  } else if (entry.state === 'done') {
+  } else if (entry.state === 'done' && !('programStatusResting' in entry)) {
+    // Why: a resting program is idle, never a finished turn.
     flags.hasLiveDone = true
   }
 }

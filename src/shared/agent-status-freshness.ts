@@ -30,7 +30,7 @@ export function agentStatusEvidenceObservedAt(
 
 export function isFreshNonDoneAgentStatus(
   entry:
-    | Pick<
+    | (Pick<
         AgentStatusEntry,
         | 'state'
         | 'updatedAt'
@@ -38,13 +38,18 @@ export function isFreshNonDoneAgentStatus(
         | 'mirroredEvidenceReceivedAt'
         | 'restoredUnconfirmed'
         | 'structuredHostOwned'
-      >
+      > & { programStatusLive?: true })
     | undefined,
   now = Date.now(),
   staleAfterMs = AGENT_STATUS_STALE_AFTER_MS
 ): boolean {
   // Why: an unconfirmed hydrated row may describe a turn that ended while no receiver was up; never fresh.
-  return Boolean(entry && entry.state !== 'done' && isAgentStatusFresh(entry, now, staleAfterMs))
+  return Boolean(
+    entry &&
+    entry.state !== 'done' &&
+    ((entry.programStatusLive === true && entry.restoredUnconfirmed !== true) ||
+      isAgentStatusFresh(entry, now, staleAfterMs))
+  )
 }
 
 /** Child evidence can remain live beneath a parent whose own turn is already done. */

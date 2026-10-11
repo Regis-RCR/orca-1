@@ -569,6 +569,7 @@ describe('dormant: with an empty slot table nothing changes', () => {
     expect(cards).toHaveLength(1)
     expect(cards[0]).not.toHaveProperty('programStatusComposed')
     expect(cards[0]).not.toHaveProperty('statusExpiresAt')
+    // @ts-expect-error a store from before the composition has no mirror; it must still build
     expect(cards).toEqual(buildDashboardSnapshot(withoutMirror, NOW).cards)
   })
 

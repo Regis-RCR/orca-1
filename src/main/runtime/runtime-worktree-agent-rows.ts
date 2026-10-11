@@ -76,7 +76,9 @@ export function attachRuntimeWorktreeAgentRows(args: {
     let hasForegroundWorkingAgent = false
     const monitoringSources: RuntimeWorktreeAgentSource[] = []
     for (const row of rows) {
-      if (!isFreshNonDoneAgentStatus(row, now)) {
+      // Why from the source: the wire row carries no liveness, and a live slot needs no heartbeat.
+      const programStatusLive = rowSources.get(row.paneKey)?.programStatusLive
+      if (!isFreshNonDoneAgentStatus({ ...row, programStatusLive }, now)) {
         continue
       }
       summary.hasHostSidebarActivity = true

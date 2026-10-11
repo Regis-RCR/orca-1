@@ -3,6 +3,7 @@ import {
   type ProgramStatusMirrorRecord,
   type ProgramStatusPaneIpcPayload
 } from '../../../../shared/program-status/program-status-pane-payload'
+import { isProgramStatusPreferred } from '../../../../shared/program-status/program-status-preference'
 import type { AppState } from '../types'
 import type { AgentStatusRuntime } from './agent-status-runtime'
 import type { AgentStatusSlice } from './agent-status-slice-contract'
@@ -10,6 +11,12 @@ import {
   getTabIdFromPaneKey,
   isRecentlyClosedAgentStatusTab
 } from './agent-status-pane-key-tab-binding'
+import { createProgramStatusHideActions } from './program-status-hide-actions'
+import {
+  advancePendingHides,
+  derivedLocalHide,
+  type ProgramStatusPendingHides
+} from '../../../../shared/program-status/program-status-pending-hide'
 
 // Why the server's bound: the mirror never holds more slots than main does.
 const PROGRAM_STATUS_MIRROR_BOUND = 500
@@ -21,8 +28,11 @@ type MirrorState = Pick<
   | 'programStatusPreferred'
   | 'programStatusEpoch'
   | 'recentlyClosedAgentStatusTabIds'
+  | 'programStatusPendingHides'
 >
 type MirrorPatch = Partial<MirrorState>
+
+const NO_HIDES: ProgramStatusPendingHides = Object.freeze({})
 
 function hasVisibleProgramStatus(records: Record<string, ProgramStatusMirrorRecord>): boolean {
   return Object.values(records).some((record) => isProgramStatusMirrorRecordVisible(record))
@@ -55,8 +65,11 @@ export function programStatusRowsPatch(
   rows: readonly ProgramStatusPaneIpcPayload[]
 ): MirrorPatch {
   let next = s.programStatusByPaneKey
+  let hides = s.programStatusPendingHides ?? NO_HIDES
   let changedComposition = false
   for (const { paneKey, tabId, worktreeId, revision, programStatus } of rows) {
+    // Why before the refusals: a row a closed pane refuses still proves its PTY moved on.
+    hides = advancePendingHides(hides, programStatus, revision)
     const prev = next[paneKey]
     const closedTab = isRecentlyClosedAgentStatusTab(
       s.recentlyClosedAgentStatusTabIds,
@@ -72,16 +85,27 @@ export function programStatusRowsPatch(
     }
     next = next === s.programStatusByPaneKey ? { ...next } : next
     delete next[paneKey]
-    next[paneKey] = { revision, tabId, worktreeId, slot: programStatus }
+    // Why derived: a pending dismissal belongs to its PTY, so it reaches whatever pane shows it.
+    const localHide = derivedLocalHide(hides, programStatus)
+    next[paneKey] = {
+      revision,
+      tabId,
+      worktreeId,
+      slot: programStatus,
+      ...(localHide ? { localHide } : {})
+    }
     changedComposition ||=
       isProgramStatusMirrorRecordVisible(prev) || isProgramStatusMirrorRecordVisible(next[paneKey])
   }
+  const hidesPatch =
+    hides === (s.programStatusPendingHides ?? NO_HIDES) ? {} : { programStatusPendingHides: hides }
   if (next === s.programStatusByPaneKey) {
-    return {}
+    return hidesPatch
   }
   // Why: tombstones keep their revision against racing rows, but only up to a bound.
   evictOldestTombstones(next)
   return {
+    ...hidesPatch,
     programStatusByPaneKey: next,
     ...(changedComposition ? { programStatusEpoch: s.programStatusEpoch + 1 } : {})
   }
@@ -136,18 +160,9 @@ export function programStatusClosureLiftedPatch(
   return lifted ? { programStatusClosedPaneKeys: closed } : {}
 }
 
-/** Why `in`: the preference ships with its own switch; until then nothing sets it. */
-function readProgramStatusPreferred(settings: AppState['settings']): boolean {
-  return (
-    !!settings &&
-    'agentProgramStatusPreferred' in settings &&
-    settings.agentProgramStatusPreferred === true
-  )
-}
-
 /** One subscription mirrors the preference as a primitive, so caches never key on `settings`. */
 export function syncProgramStatusPreferred(state: AppState, previous?: AppState): void {
-  const preferred = readProgramStatusPreferred(state.settings)
+  const preferred = isProgramStatusPreferred(state.settings)
   // Why `=== true`: a partial test store without the mirror reads as not preferred, unchanged.
   if (
     (!previous || state.settings !== previous.settings) &&
@@ -161,13 +176,23 @@ export function createProgramStatusMirrorActions(
   runtime: AgentStatusRuntime
 ): Pick<
   AgentStatusSlice,
-  'applyProgramStatusPaneRows' | 'setProgramStatusPreferred' | 'acknowledgeProgramStatusForPane'
+  | 'applyProgramStatusPaneRows'
+  | 'setProgramStatusPreferred'
+  | 'acknowledgeProgramStatusForPane'
+  | 'hideProgramStatusForPane'
+  | 'revealProgramStatusForPane'
+  | 'commitProgramStatusHide'
 > {
-  const { get, set } = runtime
+  const { set } = runtime
   const setPatch = (build: (s: AppState) => MirrorPatch): void =>
     set((s) => programStatusPatchOrSame(s, build(s)))
+  const { actions, sendCommittedHides } = createProgramStatusHideActions(runtime)
   return {
-    applyProgramStatusPaneRows: (rows) => setPatch((s) => programStatusRowsPatch(s, rows)),
+    ...actions,
+    applyProgramStatusPaneRows: (rows) => {
+      setPatch((s) => programStatusRowsPatch(s, rows))
+      sendCommittedHides()
+    },
     setProgramStatusPreferred: (preferred) =>
       setPatch((s) =>
         s.programStatusPreferred === preferred
@@ -178,25 +203,6 @@ export function createProgramStatusMirrorActions(
                 ? { programStatusEpoch: s.programStatusEpoch + 1 }
                 : {})
             }
-      ),
-    // Why: the optimistic half of a dismissal; main's tombstone of a higher revision replaces it.
-    acknowledgeProgramStatusForPane: (paneKey) => {
-      const record = get().programStatusByPaneKey[paneKey]
-      if (!isProgramStatusMirrorRecordVisible(record)) {
-        return
-      }
-      const { incarnationId, view, shown } = record.slot
-      const ack = { incarnationId, view, generation: shown.generation }
-      setPatch((s) => ({
-        programStatusByPaneKey: {
-          ...s.programStatusByPaneKey,
-          [paneKey]: { ...record, localHide: ack }
-        },
-        programStatusEpoch: s.programStatusEpoch + 1
-      }))
-      if (typeof window !== 'undefined') {
-        window.api?.agentStatus?.drop?.(paneKey, ack)
-      }
-    }
+      )
   }
 }

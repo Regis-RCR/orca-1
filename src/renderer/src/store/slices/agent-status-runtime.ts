@@ -4,6 +4,7 @@ import type { AgentStatusBatchTransaction, AgentStatusBatchUpdate } from './agen
 import type { AgentStatusSlice } from './agent-status-slice-contract'
 import type { GeneratedTabTitleUpdate } from './terminal-tab-title-batch'
 import { createFreshnessScheduler } from './agent-status-freshness-scheduler'
+import { selectExpiringProgramStatusEntries } from '../../../../shared/program-status/program-status-expiry'
 
 export type AgentStatusStateUpdate =
   | AppState
@@ -40,7 +41,7 @@ export function createAgentStatusRuntime(
 
   // Deliberately narrower than zustand's `set`: no `replace` parameter, so no call site in
   // this slice can compile into a REPLACE the batch commit is unable to express.
-  const set = (update: AgentStatusStateUpdate): void => {
+  const applyUpdate = (update: AgentStatusStateUpdate): void => {
     const staged = batchedAgentStatusState
     if (staged === null) {
       storeSet(update, false)
@@ -59,6 +60,15 @@ export function createAgentStatusRuntime(
     }
     // The staged object is private until commit, so fold into it instead of cloning AppState per update.
     Object.assign(staged, nextState)
+  }
+
+  const set = (update: AgentStatusStateUpdate): void => {
+    const mirror = get().programStatusByPaneKey
+    applyUpdate(update)
+    // Why: slot deadlines are a function of the mirror alone, so every mirror write re-arms them.
+    if (get().programStatusByPaneKey !== mirror) {
+      programStatusFreshness.scheduleDeferred()
+    }
   }
 
   const runAfterCommit = (effect: () => void): void => {
@@ -180,6 +190,12 @@ export function createAgentStatusRuntime(
         sortEpoch: s.sortEpoch + 1
       }))
     }
+  })
+
+  // Why its own epoch: a slot deadline must not wake the mobile sync keyed on agentStatusEpoch.
+  const programStatusFreshness = createFreshnessScheduler({
+    getStatusEntries: () => selectExpiringProgramStatusEntries(get().programStatusByPaneKey),
+    bumpEpochs: () => set((s) => ({ programStatusEpoch: s.programStatusEpoch + 1 }))
   })
 
   const clearSleepingAgentSessionsByPaneKey = (paneKeys: readonly string[]): void => {

@@ -5,6 +5,7 @@ import type { RuntimeTerminalAgentStatusEvent } from '../runtime-terminal-contra
 import type { TerminalSideEffectBatch } from '../../../shared/terminal-side-effect-facts'
 import type { ClaudeTerminalEvidence } from '../../../shared/claude-terminal-interrupt'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import type { ProgramStatusPaneIpcPayload } from '../../../shared/program-status/program-status-pane-payload'
 import type { StructuredAgentSessionStatusSink } from '../../native-chat/agent-session-wire/structured-agent-session-status-feed'
 import type { ObservedAgentStatusPaneIdentity } from '../../ipc/agent-status-ipc-boundary'
 import type { AgentHookAuthorityAttestation } from '../../agent-hooks/server'
@@ -26,6 +27,8 @@ export type RuntimeConstructionDependencies = {
   onClaudeTerminalEvidence?: (paneKey: string, evidence: ClaudeTerminalEvidence) => void
   getAgentStatusSnapshot?: () => AgentStatusIpcPayload[]
   getAgentStatusSnapshotForPane?: (paneKey: string) => AgentStatusIpcPayload[]
+  /** Program-status slot rows; read only by a `worktree.ps` caller that opts in. */
+  getProgramStatusSnapshot?: () => ProgramStatusPaneIpcPayload[]
   structuredAgentStatusSink?: StructuredAgentSessionStatusSink
   readObservedAgentStatusPaneIdentity?: (paneKey: string) => ObservedAgentStatusPaneIdentity
   getAgentProviderSessionSnapshot?: () => AgentStatusIpcPayload[]

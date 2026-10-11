@@ -28,7 +28,9 @@ export const WORKTREE_CATALOG_METHODS = [
             supportsWorktreeVisibilitySourceDefaults(
               context,
               params.supportsWorktreeVisibilitySourceDefaults
-            )
+            ),
+            // Why opt-in: mobile and older callers keep the byte-exact hook-only listing.
+            params.composeProgramStatus === true
           ),
           context,
           pendingAtScan

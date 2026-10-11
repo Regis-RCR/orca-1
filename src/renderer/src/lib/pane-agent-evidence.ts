@@ -23,11 +23,15 @@ export function isExplicitAgentStatusFresh(
     | 'mirroredEvidenceReceivedAt'
     | 'restoredUnconfirmed'
     | 'structuredHostOwned'
-  >,
+  > & { programStatusLive?: true },
   now: number,
   staleAfterMs: number
 ): boolean {
-  return isAgentStatusFresh(entry, now, staleAfterMs)
+  // Why a live slot counts here and not in isAgentStatusFresh: that predicate has other readers.
+  return (
+    (entry.programStatusLive === true && entry.restoredUnconfirmed !== true) ||
+    isAgentStatusFresh(entry, now, staleAfterMs)
+  )
 }
 
 /**

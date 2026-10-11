@@ -6,6 +6,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import type { RetainedAgentEntry } from '@/store/slices/agent-status'
 import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
+import { NO_PROGRAM_STATUS } from '@/store/selectors/composed-agent-status.test-support'
 
 const NOW = 1_000_000_000
 const LEAF_1 = '11111111-1111-4111-8111-111111111111'
@@ -64,6 +65,7 @@ function entry(paneKey: string, tabId: string, worktreeId: string): AgentStatusE
 
 function baseState(): DashboardSnapshotState {
   return {
+    ...NO_PROGRAM_STATUS,
     repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: [worktree('w1'), worktree('w2')] },
     tabsByWorktree: { w1: [tab('tab1', 'w1')], w2: [tab('tab2', 'w2')] },

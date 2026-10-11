@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach, vi } from 'vitest'
 import { shallow } from 'zustand/shallow'
 import { selectWorktreeActivityStatuses } from './use-worktree-activity-statuses'
+import { NO_PROGRAM_STATUS } from '@/store/selectors/composed-agent-status.test-support'
 
 type StatusState = Parameters<typeof selectWorktreeActivityStatuses>[0]
 
@@ -15,7 +16,8 @@ function makeStatusState(): StatusState {
     agentStatusByPaneKey: {},
     migrationUnsupportedByPtyId: {},
     retainedAgentsByPaneKey: {},
-    runtimeAgentOrchestrationByPaneKey: {}
+    runtimeAgentOrchestrationByPaneKey: {},
+    ...NO_PROGRAM_STATUS
   }
 }
 

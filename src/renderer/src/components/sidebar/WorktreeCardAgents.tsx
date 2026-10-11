@@ -83,6 +83,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
     useAppStore((s) => s.agentActivityDisplayMode) ?? DEFAULT_AGENT_ACTIVITY_DISPLAY_MODE
   const dropAgentStatus = useAppStore((s) => s.dropAgentStatus)
   const dismissRetainedAgent = useAppStore((s) => s.dismissRetainedAgent)
+  const acknowledgeProgramStatusForPane = useAppStore((s) => s.acknowledgeProgramStatusForPane)
   const { targetMode: agentSendPopoverTargetMode, agentStatusEpoch } = useAppStore(
     useShallow((s) => selectSendTargetControlInputs(s, worktreeId))
   )
@@ -105,10 +106,12 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
 
   const handleDismissAgent = useCallback(
     (paneKey: string) => {
+      // Why each producer's own operation: dismissing a row hides both, and neither reaches the other.
+      acknowledgeProgramStatusForPane(paneKey)
       dropAgentStatus(paneKey)
       dismissRetainedAgent(paneKey)
     },
-    [dropAgentStatus, dismissRetainedAgent]
+    [acknowledgeProgramStatusForPane, dropAgentStatus, dismissRetainedAgent]
   )
 
   const isAgentSendTargetModeActive = agentSendPopoverTargetMode !== null

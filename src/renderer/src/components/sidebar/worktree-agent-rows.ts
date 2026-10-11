@@ -30,6 +30,14 @@ import {
 import { resolveRowAgentType } from './worktree-agent-row-type'
 import { entryWithRuntimeOrchestration } from './worktree-agent-row-orchestration'
 
+// Why at row construction: a resting program is `done` underneath, and only its marker says idle.
+function programStatusRowState(
+  entry: AgentStatusEntry,
+  state: DashboardAgentRow['state']
+): DashboardAgentRow['state'] {
+  return 'programStatusResting' in entry ? 'idle' : state
+}
+
 function countTerminalLayoutLeaves(node: TerminalPaneLayoutNode | null | undefined): number {
   if (!node) {
     return 0
@@ -188,7 +196,10 @@ export function buildWorktreeAgentRows(args: {
         tab,
         agentType: resolveRowAgentType(rowEntry, tab),
         rowSource: 'live',
-        state: shouldDecay ? resolveDecayedAgentRowState(rowEntry, hasLivePty) : rowEntry.state,
+        state: programStatusRowState(
+          rowEntry,
+          shouldDecay ? resolveDecayedAgentRowState(rowEntry, hasLivePty) : rowEntry.state
+        ),
         startedAt
       })
       rows.push(...buildSubagentChildRows({ parentEntry: rowEntry, tab, parentIsFresh: isFresh }))
@@ -232,9 +243,12 @@ export function buildWorktreeAgentRows(args: {
       rowSource: 'live',
       // Why: this row's tab is synthesized because no tab for it exists in this renderer,
       // so there is no live-PTY evidence to hold — the decay destination is always `idle`.
-      state: shouldDecay
-        ? resolveDecayedAgentRowState(rowEntry, tabHasLivePty(ptyIdsByTabId, tab.id))
-        : rowEntry.state,
+      state: programStatusRowState(
+        rowEntry,
+        shouldDecay
+          ? resolveDecayedAgentRowState(rowEntry, tabHasLivePty(ptyIdsByTabId, tab.id))
+          : rowEntry.state
+      ),
       startedAt
     })
     rows.push(...buildSubagentChildRows({ parentEntry: rowEntry, tab, parentIsFresh: isFresh }))

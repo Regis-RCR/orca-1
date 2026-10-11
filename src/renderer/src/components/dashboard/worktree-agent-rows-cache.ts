@@ -23,7 +23,7 @@ import {
 import type { PaneForegroundAgentEntry } from '@/store/slices/pane-foreground-agent'
 
 type WorktreeAgentRowsCacheEntry = {
-  /** Caller-provided invalidation token for time-based freshness (agentStatusEpoch). */
+  /** Caller-provided invalidation token for time-based freshness (the composition token). */
   generation: unknown
   liveEntries: AgentStatusEntry[]
   migrationUnsupported: MigrationUnsupportedPtyEntry[]
@@ -44,7 +44,7 @@ type WorktreeAgentRowsCacheEntry = {
  * worktrees' arrays referentially stable — so an unrelated status/title write
  * recomputes one worktree instead of all of them.
  *
- * Rows depend on wall-clock freshness, so `generation` (agentStatusEpoch) must
+ * Rows depend on wall-clock freshness, so `generation` (agentStatusCompositionToken) must
  * change whenever decay may have shifted a row state.
  */
 export type WorktreeAgentRowsCache = {
@@ -90,6 +90,9 @@ export type WorktreeAgentRowsState = Pick<
   | 'terminalLayoutsByTabId'
   | 'ptyIdsByTabId'
   | 'runtimePaneTitlesByTabId'
+  | 'programStatusByPaneKey'
+  | 'programStatusPreferred'
+  | 'programStatusEpoch'
 > &
   Partial<Pick<AppState, 'unifiedTabsByWorktree' | 'paneForegroundAgentByPaneKey'>>
 

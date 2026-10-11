@@ -2,6 +2,7 @@ import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
 import type { AppState } from '@/store/types'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../shared/agent-status-types'
 import { selectLiveAgentStatusEntriesForWorktree } from './worktree-agent-row-selectors'
+import { agentStatusCompositionToken } from '@/store/selectors/composed-agent-status'
 
 export const EMPTY_WORKTREE_AGENT_FRESHNESS_SIGNATURE = ''
 
@@ -12,6 +13,9 @@ type WorktreeAgentFreshnessState = Pick<
   | 'migrationUnsupportedByPtyId'
   | 'retainedAgentsByPaneKey'
   | 'tabsByWorktree'
+  | 'programStatusByPaneKey'
+  | 'programStatusPreferred'
+  | 'programStatusEpoch'
 >
 
 function buildWorktreeAgentFreshnessSignature(
@@ -35,16 +39,17 @@ export function createWorktreeAgentFreshnessSelector(
   worktreeId: string,
   readNow: () => number = Date.now
 ): (state: WorktreeAgentFreshnessState) => string {
-  let cachedGlobalEpoch: number | null = null
+  let cachedToken: unknown = null
   let cachedSignature = EMPTY_WORKTREE_AGENT_FRESHNESS_SIGNATURE
 
   return (state) => {
-    // Why: the status slice bumps the epoch for state/freshness changes;
+    // Why: the status slice bumps the epoch for state/freshness changes, the mirror its own;
     // same-epoch map writes are fresh same-state metadata and cannot alter decay.
-    if (cachedGlobalEpoch === state.agentStatusEpoch) {
+    const token = agentStatusCompositionToken(state)
+    if (cachedToken === token) {
       return cachedSignature
     }
-    cachedGlobalEpoch = state.agentStatusEpoch
+    cachedToken = token
     // Why: the global epoch wakes every card, but only cards whose effective
     // fresh/stale row state changed should render and rebuild their row trees.
     cachedSignature = buildWorktreeAgentFreshnessSignature(state, worktreeId, readNow())

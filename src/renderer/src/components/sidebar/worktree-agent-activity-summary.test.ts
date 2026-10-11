@@ -11,6 +11,7 @@ import {
   selectWorktreeAgentActivitySummary,
   type AgentActivityInput
 } from './worktree-agent-activity-summary'
+import { NO_PROGRAM_STATUS } from '@/store/selectors/composed-agent-status.test-support'
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 
@@ -74,6 +75,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         'repo::/wt-2': [retainedTab]
       },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [firstPaneKey]: makeAgentStatusEntry({ paneKey: firstPaneKey, state: 'working' })
       },
@@ -113,6 +115,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const state: AgentActivityInput = {
       tabsByWorktree,
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [paneKey]: entry
       },
@@ -151,6 +154,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const state: AgentActivityInput = {
       tabsByWorktree,
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [paneKey]: makeAgentStatusEntry({ paneKey, state: 'working' })
       },
@@ -161,6 +165,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const changedState = {
       ...state,
       agentStatusEpoch: 1,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [paneKey]: makeAgentStatusEntry({ paneKey, state: 'done' })
       }
@@ -184,6 +189,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
       {
         tabsByWorktree: { 'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')] },
         agentStatusEpoch: 1,
+        ...NO_PROGRAM_STATUS,
         agentStatusByPaneKey: {
           [paneKey]: makeAgentStatusEntry({
             paneKey,
@@ -215,6 +221,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
       {
         tabsByWorktree: { 'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')] },
         agentStatusEpoch: 2,
+        ...NO_PROGRAM_STATUS,
         agentStatusByPaneKey: {
           [paneKey]: makeAgentStatusEntry({
             paneKey,
@@ -239,6 +246,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
       {
         tabsByWorktree: { 'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')] },
         agentStatusEpoch: 3,
+        ...NO_PROGRAM_STATUS,
         agentStatusByPaneKey: {
           [paneKey]: makeAgentStatusEntry({
             paneKey,
@@ -264,6 +272,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         {
           tabsByWorktree: { 'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')] },
           agentStatusEpoch: state === 'working' ? (outcome === 'failure' ? 5 : 6) : 7,
+          ...NO_PROGRAM_STATUS,
           agentStatusByPaneKey: {
             [paneKey]: makeAgentStatusEntry({
               paneKey,
@@ -316,6 +325,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         {
           tabsByWorktree: { [worktreeId]: [liveTab, retainedTab] },
           agentStatusEpoch: epoch++,
+          ...NO_PROGRAM_STATUS,
           agentStatusByPaneKey,
           migrationUnsupportedByPtyId: {},
           runtimeAgentOrchestrationByPaneKey: {},
@@ -369,6 +379,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
           'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')]
         },
         agentStatusEpoch: 0,
+        ...NO_PROGRAM_STATUS,
         agentStatusByPaneKey: {
           [paneKey]: makeAgentStatusEntry({
             paneKey,
@@ -409,11 +420,13 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const state: AgentActivityInput = {
       ...baseInputs,
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: initialStatuses
     }
     const changedState: AgentActivityInput = {
       ...baseInputs,
       agentStatusEpoch: 1,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         ...initialStatuses,
         [changedPaneKey]: makeAgentStatusEntry({ paneKey: changedPaneKey, state: 'done' })
@@ -455,6 +468,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         [worktreeId]: [makeTab('tab-1', worktreeId), makeTab('tab-2', worktreeId)]
       },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [firstPaneKey]: makeAgentStatusEntry({ paneKey: firstPaneKey, state: 'working' }),
         [secondPaneKey]: makeAgentStatusEntry({ paneKey: secondPaneKey, state: 'working' })
@@ -463,6 +477,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const reordered: AgentActivityInput = {
       ...initial,
       agentStatusEpoch: 1,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [secondPaneKey]: initial.agentStatusByPaneKey[secondPaneKey],
         [firstPaneKey]: initial.agentStatusByPaneKey[firstPaneKey]
@@ -472,6 +487,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
       ...sharedInputs,
       tabsByWorktree: { [worktreeId]: [makeTab('tab-3', worktreeId)] },
       agentStatusEpoch: 2,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [replacementPaneKey]: makeAgentStatusEntry({
           paneKey: replacementPaneKey,
@@ -482,6 +498,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const removed: AgentActivityInput = {
       ...replacement,
       agentStatusEpoch: 3,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {}
     }
 
@@ -508,6 +525,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         'repo::/wt-1': [makeTab('tab-parent', 'repo::/wt-1')]
       },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [childPaneKey]: makeAgentStatusEntry({
           paneKey: childPaneKey,
@@ -534,6 +552,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         'repo::/wt-1': [makeTab('tab-parent', 'repo::/wt-1')]
       },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [childPaneKey]: makeAgentStatusEntry({
           paneKey: childPaneKey,
@@ -560,6 +579,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
         'repo::/wt-1': [makeTab('tab-parent', 'repo::/wt-1')]
       },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: {
         [childPaneKey]: makeAgentStatusEntry({
           paneKey: childPaneKey,
@@ -593,6 +613,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const state: AgentActivityInput = {
       tabsByWorktree: { 'repo::/wt-1': [makeTab('tab-1', 'repo::/wt-1')] },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: { [paneKey]: entry },
       migrationUnsupportedByPtyId: {},
       runtimeAgentOrchestrationByPaneKey: {},
@@ -619,6 +640,7 @@ describe('selectWorktreeAgentActivitySummary', () => {
     const state: AgentActivityInput = {
       tabsByWorktree: { 'repo::/wt-1': [tab] },
       agentStatusEpoch: 0,
+      ...NO_PROGRAM_STATUS,
       agentStatusByPaneKey: { [paneKey]: entry },
       migrationUnsupportedByPtyId: {},
       runtimeAgentOrchestrationByPaneKey: {},

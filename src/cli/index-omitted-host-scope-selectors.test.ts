@@ -286,4 +286,17 @@ describe('worktree listings report their host coverage', () => {
     const printed = String(logSpy.mock.calls[0]?.[0])
     expect(printed).toContain('scope: unverifiable')
   })
+
+  it('asks `worktree ps` for program status composed with hook status', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_worktree_ps', { worktrees: [], totalCount: 0, truncated: false })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(['worktree', 'ps'], '/tmp/repo')
+
+    const psCall = callMock.mock.calls.find(([method]) => method === 'worktree.ps')
+    expect(psCall?.[1]).toMatchObject({ composeProgramStatus: true })
+  })
 })

@@ -106,6 +106,7 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
     recentlyClosedAgentStatusTabIds: {},
     recentlyRetiredAgentStatusPaneKeys: {},
     programStatusByPaneKey: {},
+    programStatusPendingHides: {},
     programStatusClosedPaneKeys: {},
     programStatusPreferred: false,
     programStatusEpoch: 0

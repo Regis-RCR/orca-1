@@ -22,6 +22,9 @@ type WorktreeActivityStatusState = Pick<
   | 'migrationUnsupportedByPtyId'
   | 'retainedAgentsByPaneKey'
   | 'runtimeAgentOrchestrationByPaneKey'
+  | 'programStatusByPaneKey'
+  | 'programStatusPreferred'
+  | 'programStatusEpoch'
 >
 
 export function selectWorktreeActivityStatuses(

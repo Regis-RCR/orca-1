@@ -14,6 +14,11 @@ import {
   type AgentPaneActivityFlags
 } from '@/lib/agent-pane-activity-flags'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { AppState } from '@/store/types'
+import {
+  agentStatusCompositionToken,
+  selectComposedAgentStatusByPaneKey
+} from '@/store/selectors/composed-agent-status'
 
 // Why: a terminal tab is a container of panes, exactly like a worktree card is
 // a container of tabs. Reuse the WorktreeCard status vocabulary and resolver so
@@ -30,7 +35,7 @@ type TerminalTabActivityFlags = AgentPaneActivityFlags & {
 
 type FlagsCache = {
   agentStatusByPaneKey: Record<string, AgentStatusEntry> | undefined
-  agentStatusEpoch: number | undefined
+  agentStatusEpoch: unknown
   flagsByTabId: Map<string, TerminalTabActivityFlags>
 }
 
@@ -42,7 +47,7 @@ let flagsCache: FlagsCache | null = null
 
 function getTerminalTabActivityFlags(
   agentStatusByPaneKey: Record<string, AgentStatusEntry> | undefined,
-  agentStatusEpoch: number | undefined
+  agentStatusEpoch: unknown
 ): Map<string, TerminalTabActivityFlags> {
   // Why: freshness is time-based, so the store bumps agentStatusEpoch without
   // replacing the map at the 30m stale boundary (createFreshnessScheduler).
@@ -131,8 +136,9 @@ type TerminalTabActivityInput = {
   tab: Pick<TerminalTab, 'id' | 'title' | 'launchAgent'>
   agentStatusByPaneKey?: Record<string, AgentStatusEntry>
   // Why: the store bumps this at the 30m stale boundary without replacing the
-  // pane-status map; it is the flag cache's invalidation key (see above).
-  agentStatusEpoch?: number
+  // pane-status map; it is the flag cache's invalidation key (see above). The tab bar passes
+  // the composition token, which also moves at a program-status slot's boundary.
+  agentStatusEpoch?: unknown
   runtimePaneTitlesByTabId?: Record<string, Record<number, string>>
   ptyIdsByTabId?: Record<string, string[]>
   terminalLayout?: TerminalLayoutSnapshot
@@ -171,6 +177,31 @@ export function resolveTerminalTabActivityStatus({
     // Why: retained/orchestration promotions are worktree-aggregate concerns;
     // a tab reflects its own live panes and title only.
     hasRetainedDone: false
+  })
+}
+
+/** The tab bar's read of the store: the composed map, keyed on the composition token. */
+export function selectTerminalTabActivityStatus(
+  state: Pick<
+    AppState,
+    | 'agentStatusByPaneKey'
+    | 'agentStatusEpoch'
+    | 'programStatusByPaneKey'
+    | 'programStatusPreferred'
+    | 'programStatusEpoch'
+    | 'runtimePaneTitlesByTabId'
+    | 'ptyIdsByTabId'
+    | 'terminalLayoutsByTabId'
+  >,
+  tab: TerminalTabActivityInput['tab']
+): TerminalTabActivityStatus {
+  return resolveTerminalTabActivityStatus({
+    tab,
+    agentStatusByPaneKey: selectComposedAgentStatusByPaneKey(state),
+    agentStatusEpoch: agentStatusCompositionToken(state),
+    runtimePaneTitlesByTabId: state.runtimePaneTitlesByTabId,
+    ptyIdsByTabId: state.ptyIdsByTabId,
+    terminalLayout: state.terminalLayoutsByTabId?.[tab.id]
   })
 }
 

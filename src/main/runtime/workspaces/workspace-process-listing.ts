@@ -1,5 +1,6 @@
 import { resolveStructuredCodexAccountKind } from '../structured-agent-account-home'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { programStatusPreferenceOf } from '../../../shared/program-status/program-status-preference'
 import { collectRuntimeWorktreeAgentSources } from '../runtime-worktree-agent-sources'
 import { OrcaRuntimeWithWorktreePsDependencies } from './workspace-process-listing-dependencies'
 import { DEFAULT_WORKTREE_PS_LIMIT } from '../orca-runtime-postlude'
@@ -61,7 +62,8 @@ import { isStructuredAttentionWorkspaceHidden } from '../structured-attention-hi
 export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktreePsDependencies {
   async getWorktreePs(
     limit = DEFAULT_WORKTREE_PS_LIMIT,
-    sourceDefaultsSupported = true
+    sourceDefaultsSupported = true,
+    composeProgramStatus = false
   ): Promise<RuntimeWorktreePsResult> {
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new Error('invalid_limit')
@@ -137,7 +139,13 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         connectedPtyEvidence,
         // Structured sessions are in here too: the host publishes them into the same store.
         hookSnapshots: this.getAgentStatusSnapshotFn?.() ?? [],
-        readStructuredSummary: getStructuredAgentSessionHost()?.readStatusSummary
+        readStructuredSummary: getStructuredAgentSessionHost()?.readStatusSummary,
+        programStatus: composeProgramStatus
+          ? {
+              rows: this.getProgramStatusSnapshotFn?.() ?? [],
+              preference: programStatusPreferenceOf(this.store?.getSettings())
+            }
+          : undefined
       }),
       orchestrationByPaneKey: this.agentOrchestrationProjection.buildByPaneKey(),
       getSummary

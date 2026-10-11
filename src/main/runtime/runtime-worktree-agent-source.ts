@@ -26,4 +26,6 @@ export type RuntimeWorktreeAgentSource = Pick<AgentStatusIpcPayload, 'subagents'
   updatedAt: number
   /** Projected by the structured session host; `owned` rows stay fresh past the staleness window. */
   structuredHost?: StructuredHostStatus
+  /** A won program-status slot whose producer is live: fresh without a heartbeat. Never on the wire. */
+  programStatusLive?: true
 }

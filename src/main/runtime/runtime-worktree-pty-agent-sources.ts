@@ -12,6 +12,12 @@ import {
   structuredAgentSessionTabId
 } from '../../shared/structured-agent-session-projection'
 import type { RuntimeWorktreeAgentSource } from './runtime-worktree-agent-source'
+import {
+  composeAgentStatusEntry,
+  programStatusEntryFromSlot,
+  type ProgramStatusPreference
+} from '../../shared/program-status/compose-agent-status-entry'
+import type { ProgramStatusPaneIpcPayload } from '../../shared/program-status/program-status-pane-payload'
 
 export type ConnectedPtyEvidence = {
   tabIds: ReadonlySet<string>
@@ -40,19 +46,71 @@ function publishedStructuredChildren(
   return summary?.workspaceId === entry.worktreeId ? (summary?.children ?? []) : undefined
 }
 
-/** Admit hook-server rows using their execution-host evidence. */
+/** Present only for a caller that opted in; the host's own setting picks the winner. */
+export type RuntimeProgramStatusComposition = {
+  rows: readonly ProgramStatusPaneIpcPayload[]
+  preference: ProgramStatusPreference
+}
+
+/** The panes a visible slot wins, as display-only sources: no agent identity, prompt or tool. */
+function programStatusWonSources(
+  hooks: readonly AgentStatusIpcPayload[],
+  composition: RuntimeProgramStatusComposition | undefined
+): Map<string, RuntimeWorktreeAgentSource> {
+  const won = new Map<string, RuntimeWorktreeAgentSource>()
+  if (!composition) {
+    return won
+  }
+  const hookByPane = new Map(hooks.map((hook) => [hook.paneKey, hook]))
+  for (const { paneKey, tabId, worktreeId, programStatus } of composition.rows) {
+    if (!programStatus) {
+      continue
+    }
+    const atPane = { paneKey, tabId, worktreeId, slot: programStatus }
+    const hook = hookByPane.get(paneKey)
+    if (composeAgentStatusEntry(hook, atPane, composition.preference) === hook) {
+      continue
+    }
+    const entry = programStatusEntryFromSlot(atPane)
+    won.set(paneKey, {
+      paneKey,
+      tabId,
+      worktreeId,
+      connectionId: null,
+      state: entry.state,
+      agentType: null,
+      prompt: '',
+      lastAssistantMessage: null,
+      toolName: null,
+      toolInput: null,
+      interrupted: false,
+      ...agentVerdictFields(entry),
+      stateStartedAt: entry.stateStartedAt,
+      updatedAt: entry.evidenceObservedAt ?? entry.updatedAt,
+      ...(entry.programStatusLive ? { programStatusLive: true as const } : {})
+    })
+  }
+  return won
+}
+
+/** Admit hook-server rows, and opted-in program-status slots, using execution-host evidence. */
 export function collectRuntimeWorktreePtyAgentSources(args: {
   hookSnapshots: readonly AgentStatusIpcPayload[]
   readStructuredSummary?: (sessionId: string) => AgentSessionStatusSummary | undefined
+  programStatus?: RuntimeProgramStatusComposition
   mirroredWorktreeIdByTabId: ReadonlyMap<string, string>
   connectedPtyEvidence: ConnectedPtyEvidence
 }): RuntimeWorktreeAgentSource[] {
   const rowSources = new Map<
     string,
-    RuntimeWorktreeAgentSource & { payload: ParsedAgentStatusPayload }
-  >()
+    RuntimeWorktreeAgentSource & { payload?: ParsedAgentStatusPayload }
+  >(programStatusWonSources(args.hookSnapshots, args.programStatus))
   for (const entry of args.hookSnapshots) {
-    if (entry.restoredUnconfirmed === true || entry.providerSessionOnly === true) {
+    if (
+      entry.restoredUnconfirmed === true ||
+      entry.providerSessionOnly === true ||
+      rowSources.has(entry.paneKey)
+    ) {
       continue
     }
     const hookPayload = pickParsedAgentStatusPayload(entry)

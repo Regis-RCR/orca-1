@@ -3,6 +3,7 @@ import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import type { RetainedAgentEntry } from '@/store/slices/agent-status'
 import type { AgentStatusCacheIdentity } from '../../../../shared/agent-status-types'
+import { programStatusEntryFromSlot } from '../../../../shared/program-status/compose-agent-status-entry'
 import { activityThreadStatusId } from './activity-thread-presentation'
 import type { AgentPaneThread } from './activity-thread-types'
 
@@ -118,6 +119,31 @@ function evictPersistedStatuses(identities: readonly AgentStatusCacheIdentity[])
   }
 }
 
+// Why: the batch drop is hook-only; a finished program-status slot is dismissed by its own ack.
+// Returns the hide operations' ids, which alone address their commit or undo.
+function hideFinishedProgramStatus(paneKeys: readonly string[]): string[] {
+  const state = useAppStore.getState()
+  const operations: string[] = []
+  for (const paneKey of paneKeys) {
+    const slot = state.programStatusByPaneKey?.[paneKey]?.slot
+    // Why the composition's own state: it reads done, idle and error as finished, and a thread
+    // showing any of them is clearable, so each must be hidden and acknowledged alike.
+    const finished = slot && programStatusEntryFromSlot({ paneKey, slot }).state === 'done'
+    const id = finished ? state.hideProgramStatusForPane(paneKey) : null
+    if (id) {
+      operations.push(id)
+    }
+  }
+  return operations
+}
+
+function commitProgramStatusHides(operations: readonly string[]): void {
+  const state = useAppStore.getState()
+  for (const id of operations) {
+    state.commitProgramStatusHide(id)
+  }
+}
+
 /** Clear one completed thread immediately; bulk clearing owns the undo toast. */
 export function clearActivityThread(thread: AgentPaneThread): boolean {
   const state = useAppStore.getState()
@@ -127,6 +153,7 @@ export function clearActivityThread(thread: AgentPaneThread): boolean {
   }
   state.applyActivityClearedAt(plan.cutoffPatch)
   state.dismissRetainedAgents(plan.retainedSnapshots.map((retained) => retained.entry.paneKey))
+  commitProgramStatusHides(hideFinishedProgramStatus(Object.keys(plan.cutoffPatch)))
   evictPersistedStatuses(plan.cacheIdentities)
   return true
 }
@@ -136,8 +163,8 @@ export function clearActivityThread(thread: AgentPaneThread): boolean {
  *
  * Live agent status, resume identity, and attention/working rows are untouched:
  * clearing stamps per-pane cutoffs (persisted UI) and removes retained completed
- * snapshots. The identity-checked main-process cache eviction is deferred until
- * the undo toast closes so Undo can restore everything losslessly.
+ * snapshots. The identity-checked main-process cache eviction and program-status
+ * ack are deferred until the undo toast closes so Undo can restore everything losslessly.
  */
 export function clearCompletedActivity(threads: readonly AgentPaneThread[]): boolean {
   const state = useAppStore.getState()
@@ -158,6 +185,8 @@ export function clearCompletedActivity(threads: readonly AgentPaneThread[]): boo
     }
   }
   state.dismissRetainedAgents(plan.retainedSnapshots.map((retained) => retained.entry.paneKey))
+  // Why deferred like the eviction: an ack sent now could not be undone.
+  const programStatusHides = hideFinishedProgramStatus(Object.keys(plan.cutoffPatch))
 
   let undone = false
   let dropped = false
@@ -174,6 +203,7 @@ export function clearCompletedActivity(threads: readonly AgentPaneThread[]): boo
     }
     dropped = true
     evictPersistedStatuses(plan.cacheIdentities)
+    commitProgramStatusHides(programStatusHides)
   }
   pendingDiskEvictions.add(dropRetainedFromDiskCache)
   if (evictionListenerRetired && typeof window !== 'undefined') {
@@ -232,6 +262,9 @@ export function clearCompletedActivity(threads: readonly AgentPaneThread[]): boo
           }
           current.applyActivityClearedAt(restorePatch)
           current.clearRetentionSuppressedPaneKeys(suppressorPaneKeysToClear)
+          for (const id of programStatusHides) {
+            current.revealProgramStatusForPane(id)
+          }
           if (snapshotsToRestore.length > 0) {
             current.retainAgents(snapshotsToRestore)
           }

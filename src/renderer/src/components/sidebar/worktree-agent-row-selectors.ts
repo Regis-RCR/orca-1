@@ -14,6 +14,7 @@ import {
 } from './worktree-agent-live-index-patch'
 import { selectWorktreeAgentOrchestration } from './worktree-agent-orchestration-index'
 import { createWorktreeRecordSelector } from '@/store/worktree-record-selector-cache'
+import { composeAgentStatusMap } from '@/store/selectors/composed-agent-status'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 
 // Why frozen and exported: card hooks return these from their inactive branch,
@@ -37,7 +38,7 @@ type WorktreeAgentRowsState = Pick<
   | 'tabsByWorktree'
 > & {
   unifiedTabsByWorktree?: AppState['unifiedTabsByWorktree']
-}
+} & Partial<Pick<AppState, 'programStatusByPaneKey' | 'programStatusPreferred'>>
 
 type TabWorktreeIndexCache = {
   tabsByWorktree: WorktreeAgentRowsState['tabsByWorktree']
@@ -61,7 +62,11 @@ type RetainedEntriesByWorktreeCache = {
 
 let tabWorktreeIndexCache: TabWorktreeIndexCache | null = null
 let liveTabWorktreeIndexCache: LiveTabWorktreeIndexCache | null = null
-let liveEntriesByWorktreeCache: LiveEntriesByWorktreeCache | null = null
+// Why the composition inputs: the patch path assumes only hook entries moved since the last read.
+let liveEntriesByWorktreeCache:
+  | (LiveEntriesByWorktreeCache &
+      Pick<WorktreeAgentRowsState, 'programStatusByPaneKey' | 'programStatusPreferred'>)
+  | null = null
 let migrationUnsupportedByWorktreeCache: MigrationUnsupportedByWorktreeCache | null = null
 let retainedEntriesByWorktreeCache: RetainedEntriesByWorktreeCache | null = null
 
@@ -122,7 +127,12 @@ function getLiveTabIdToWorktreeId(
 }
 
 function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, AgentStatusEntry[]> {
-  const agentStatusByPaneKey = state.agentStatusByPaneKey ?? EMPTY_RECORD
+  const { programStatusByPaneKey, programStatusPreferred } = state
+  const agentStatusByPaneKey = composeAgentStatusMap(
+    state.agentStatusByPaneKey ?? EMPTY_RECORD,
+    programStatusByPaneKey,
+    programStatusPreferred
+  )
   const tabsByWorktree = state.tabsByWorktree ?? EMPTY_RECORD
   const unifiedTabsByWorktree = state.unifiedTabsByWorktree
   if (
@@ -136,7 +146,9 @@ function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, Ag
   const tabIdToWorktreeId = getLiveTabIdToWorktreeId(tabsByWorktree, unifiedTabsByWorktree)
   if (
     liveEntriesByWorktreeCache?.tabsByWorktree === tabsByWorktree &&
-    liveEntriesByWorktreeCache.unifiedTabsByWorktree === unifiedTabsByWorktree
+    liveEntriesByWorktreeCache.unifiedTabsByWorktree === unifiedTabsByWorktree &&
+    liveEntriesByWorktreeCache.programStatusByPaneKey === programStatusByPaneKey &&
+    liveEntriesByWorktreeCache.programStatusPreferred === programStatusPreferred
   ) {
     const patched = patchLiveEntriesByWorktree(
       liveEntriesByWorktreeCache,
@@ -148,6 +160,8 @@ function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, Ag
         tabsByWorktree,
         unifiedTabsByWorktree,
         agentStatusByPaneKey,
+        programStatusByPaneKey,
+        programStatusPreferred,
         entriesByWorktree: patched
       }
       return patched
@@ -175,6 +189,8 @@ function getLiveEntriesByWorktree(state: WorktreeAgentRowsState): Map<string, Ag
     tabsByWorktree,
     unifiedTabsByWorktree,
     agentStatusByPaneKey,
+    programStatusByPaneKey,
+    programStatusPreferred,
     entriesByWorktree
   }
   return entriesByWorktree

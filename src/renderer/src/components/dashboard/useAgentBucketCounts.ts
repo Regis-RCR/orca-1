@@ -6,6 +6,7 @@ import {
   buildDashboardBucketCounts,
   createDashboardBucketCountsCache
 } from './build-dashboard-bucket-counts'
+import { agentStatusCompositionToken } from '@/store/selectors/composed-agent-status'
 
 export type AgentBucketCounts = Record<DashboardBucket, number>
 
@@ -27,6 +28,9 @@ export type AgentBucketCountState = Pick<
   | 'folderWorkspaces'
   | 'acknowledgedAgentsByPaneKey'
   | 'agentStatusEpoch'
+  | 'programStatusByPaneKey'
+  | 'programStatusPreferred'
+  | 'programStatusEpoch'
 > & {
   // Why null: counts never render a card's conversation name, so the
   // generated-title gate is moot and the sidebar stays off settings.
@@ -36,7 +40,7 @@ export type AgentBucketCountState = Pick<
 // Why module scope rather than useShallow: zustand runs this selector on every
 // store write, and shallow() on a plain object takes the compareEntries path —
 // two Object.entries arrays, 30 tuples and two Maps allocated per write just to
-// conclude nothing moved. Fifteen `===` against the previous slices allocates
+// conclude nothing moved. Eighteen `===` against the previous slices allocates
 // nothing on the unchanged path, and the result is a pure function of the state
 // so one gate can serve every mounted consumer.
 let previousState: AgentBucketCountState | null = null
@@ -64,7 +68,10 @@ export function selectAgentBucketCountState(s: AppState): AgentBucketCountState 
     previous.paneForegroundAgentByPaneKey === s.paneForegroundAgentByPaneKey &&
     previous.folderWorkspaces === s.folderWorkspaces &&
     previous.acknowledgedAgentsByPaneKey === s.acknowledgedAgentsByPaneKey &&
-    previous.agentStatusEpoch === s.agentStatusEpoch
+    previous.agentStatusEpoch === s.agentStatusEpoch &&
+    previous.programStatusByPaneKey === s.programStatusByPaneKey &&
+    previous.programStatusPreferred === s.programStatusPreferred &&
+    previous.programStatusEpoch === s.programStatusEpoch
   ) {
     return previous
   }
@@ -84,6 +91,9 @@ export function selectAgentBucketCountState(s: AppState): AgentBucketCountState 
     folderWorkspaces: s.folderWorkspaces,
     acknowledgedAgentsByPaneKey: s.acknowledgedAgentsByPaneKey,
     agentStatusEpoch: s.agentStatusEpoch,
+    programStatusByPaneKey: s.programStatusByPaneKey,
+    programStatusPreferred: s.programStatusPreferred,
+    programStatusEpoch: s.programStatusEpoch,
     settings: null
   }
   return previousState
@@ -101,10 +111,15 @@ export function useAgentBucketCounts(): AgentBucketCounts {
   const cacheRef = useRef<ReturnType<typeof createDashboardBucketCountsCache>>(undefined!)
   cacheRef.current ??= createDashboardBucketCountsCache()
   return useMemo(() => {
-    // Why Date.now() is read here and not a dep: idle-decay tracks agentStatusEpoch
-    // ticks (carried in `state`), matching useDashboardData. That epoch doubles as the
+    // Why Date.now() is read here and not a dep: idle-decay tracks both epochs' ticks
+    // (carried in `state`), matching useDashboardData. Their token doubles as the
     // cache generation, so a stale-boundary tick recounts every decayed bucket.
-    return buildDashboardBucketCounts(state, Date.now(), cacheRef.current, state.agentStatusEpoch)
+    return buildDashboardBucketCounts(
+      state,
+      Date.now(),
+      cacheRef.current,
+      agentStatusCompositionToken(state)
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 }

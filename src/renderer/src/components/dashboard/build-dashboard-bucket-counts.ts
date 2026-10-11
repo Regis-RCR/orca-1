@@ -157,7 +157,7 @@ function tallyWorktreeRows(
  * while its rows and the acknowledgement map hold. An acknowledgement write
  * therefore recounts without rebuilding any rows, as before. `generation` must
  * change whenever time-based freshness decay may have shifted a bucket
- * (agentStatusEpoch).
+ * (agentStatusCompositionToken).
  */
 export function buildDashboardBucketCounts(
   state: DashboardSnapshotState,

@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { NO_PROGRAM_STATUS } from '@/store/selectors/composed-agent-status.test-support'
 
 const mocks = vi.hoisted(() => ({
   acknowledgeAgents: vi.fn(),
@@ -58,9 +59,15 @@ import {
 import type { DashboardSnapshotState } from './build-dashboard-snapshot'
 import type { AppState } from '@/store/types'
 
-type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
+// Why the composition inputs apart: the fixture below predates them, and the bridge reads them.
+type DashboardSnapshotWatchState = Omit<DashboardSnapshotState, keyof typeof NO_PROGRAM_STATUS> &
+  Pick<AppState, 'agentStatusEpoch'>
 
-function makeSnapshotWatchState(): DashboardSnapshotWatchState {
+function makeSnapshotWatchState(): DashboardSnapshotWatchState & typeof NO_PROGRAM_STATUS {
+  return { ...makeHookSnapshotWatchState(), ...NO_PROGRAM_STATUS }
+}
+
+function makeHookSnapshotWatchState(): DashboardSnapshotWatchState {
   return {
     repos: [],
     worktreesByRepo: {},

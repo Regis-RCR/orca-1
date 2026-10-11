@@ -19,6 +19,7 @@ import type { StatsCollector } from '../../stats/collector'
 import type { PrepareClaudeAuth } from '../../ipc/pty/host-env/types'
 
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import type { ProgramStatusPaneIpcPayload } from '../../../shared/program-status/program-status-pane-payload'
 
 import { installRuntimeFileCommandSurface } from '../runtime-file-command-surface'
 import { installRuntimeGitCommandSurface } from '../runtime-git-command-surface'
@@ -89,6 +90,8 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   protected readonly getAgentStatusSnapshotForPaneFn:
     | ((paneKey: string) => AgentStatusIpcPayload[])
     | null
+
+  protected readonly getProgramStatusSnapshotFn: (() => ProgramStatusPaneIpcPayload[]) | null
 
   protected readonly machineName = new RuntimeMachineName(
     () => this.store?.getSettings?.().machineName
@@ -197,6 +200,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     }
     this.getAgentStatusSnapshotFn = deps?.getAgentStatusSnapshot ?? null
     this.getAgentStatusSnapshotForPaneFn = deps?.getAgentStatusSnapshotForPane ?? null
+    this.getProgramStatusSnapshotFn = deps?.getProgramStatusSnapshot ?? null
     this.structuredAgentStatusSinkFn = deps?.structuredAgentStatusSink ?? null
     this.readObservedAgentStatusPaneIdentityFn =
       deps?.readObservedAgentStatusPaneIdentity ?? (() => ({ kind: 'unobserved' }))

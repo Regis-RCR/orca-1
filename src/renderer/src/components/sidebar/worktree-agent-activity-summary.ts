@@ -12,6 +12,7 @@ import {
 } from '../../../../shared/agent-status-types'
 import { agentVerdictDisplayMark } from '../../../../shared/agent-main-agent-verdict'
 import { applyAgentPaneActivityFlags } from '@/lib/agent-pane-activity-flags'
+import { selectComposedAgentStatusByPaneKey } from '@/store/selectors/composed-agent-status'
 
 export type WorktreeAgentActivitySummary = {
   hasPermission: boolean
@@ -56,6 +57,9 @@ export type AgentActivityInput = Pick<
   | 'agentStatusByPaneKey'
   | 'migrationUnsupportedByPtyId'
   | 'retainedAgentsByPaneKey'
+  | 'programStatusByPaneKey'
+  | 'programStatusPreferred'
+  | 'programStatusEpoch'
 > & {
   tabsByWorktree: AgentActivityTabsByWorktree
   runtimeAgentOrchestrationByPaneKey?: AppState['runtimeAgentOrchestrationByPaneKey']
@@ -67,6 +71,9 @@ type AgentActivityCache = {
   migrationUnsupportedByPtyId: AppState['migrationUnsupportedByPtyId']
   retainedAgentsByPaneKey: AppState['retainedAgentsByPaneKey']
   runtimeAgentOrchestrationByPaneKey: AppState['runtimeAgentOrchestrationByPaneKey'] | undefined
+  programStatusByPaneKey: AppState['programStatusByPaneKey']
+  programStatusPreferred: boolean
+  programStatusEpoch: number
   summaries: Map<string, WorktreeAgentActivitySummary>
 }
 
@@ -89,7 +96,10 @@ function getWorktreeAgentActivitySummaries(
     agentActivityCache.agentStatusEpoch === state.agentStatusEpoch &&
     agentActivityCache.migrationUnsupportedByPtyId === state.migrationUnsupportedByPtyId &&
     agentActivityCache.retainedAgentsByPaneKey === state.retainedAgentsByPaneKey &&
-    agentActivityCache.runtimeAgentOrchestrationByPaneKey === runtimeAgentOrchestrationByPaneKey
+    agentActivityCache.runtimeAgentOrchestrationByPaneKey === runtimeAgentOrchestrationByPaneKey &&
+    agentActivityCache.programStatusByPaneKey === state.programStatusByPaneKey &&
+    agentActivityCache.programStatusPreferred === state.programStatusPreferred &&
+    agentActivityCache.programStatusEpoch === state.programStatusEpoch
   ) {
     return agentActivityCache.summaries
   }
@@ -115,7 +125,7 @@ function getWorktreeAgentActivitySummaries(
   }
 
   const now = Date.now()
-  for (const [paneKey, entry] of Object.entries(state.agentStatusByPaneKey)) {
+  for (const [paneKey, entry] of Object.entries(selectComposedAgentStatusByPaneKey(state))) {
     const paneIdentity = parseAgentStatusPaneIdentity(paneKey)
     if (!paneIdentity) {
       continue
@@ -192,6 +202,9 @@ function getWorktreeAgentActivitySummaries(
     migrationUnsupportedByPtyId: state.migrationUnsupportedByPtyId,
     retainedAgentsByPaneKey: state.retainedAgentsByPaneKey,
     runtimeAgentOrchestrationByPaneKey,
+    programStatusByPaneKey: state.programStatusByPaneKey,
+    programStatusPreferred: state.programStatusPreferred,
+    programStatusEpoch: state.programStatusEpoch,
     summaries
   }
   return summaries

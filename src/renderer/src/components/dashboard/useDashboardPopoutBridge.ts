@@ -7,6 +7,7 @@ import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-das
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 import { launchDashboardAgent } from './launch-dashboard-agent'
 import { isProgramStatusMirrorRecordVisible } from '../../../../shared/program-status/program-status-pane-payload'
+import { agentStatusCompositionToken } from '@/store/selectors/composed-agent-status'
 
 // Why: cap snapshot rebuilds during bursts of agent-status pings. The board is a
 // glanceable surface, so ~4 updates/sec is plenty and keeps the cross-worktree
@@ -38,9 +39,7 @@ export function repoIconsUnchanged(
   return nextIds.every((id) => id in previous && next[id] === previous[id])
 }
 
-type DashboardSnapshotWatchState = DashboardSnapshotState &
-  Pick<AppState, 'agentStatusEpoch'> &
-  Partial<Pick<AppState, 'programStatusPreferred' | 'programStatusEpoch'>>
+type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
 
 // Why: the pop-out never patches a card with a visible slot, so this window republishes it whole
 // when its slot, the preference, the composition epoch or that pane's hook entry changes.
@@ -199,7 +198,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
       const state = useAppStore.getState()
       const snapshot = buildDashboardSnapshot(state, lastPublishAt, {
         rowsCache,
-        rowsGeneration: state.agentStatusEpoch
+        rowsGeneration: agentStatusCompositionToken(state)
       })
       const icons = snapshot.repoIconsByRepoId ?? {}
       if (!withIcons && repoIconsUnchanged(icons, lastPublishedRepoIcons)) {
