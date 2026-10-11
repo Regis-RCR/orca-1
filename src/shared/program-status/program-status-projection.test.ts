@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  programStatusSummariesEqual,
   summarizeProgramStatusRecords,
   type ProgramStatusRecord,
   type ProgramStatusRecordState
@@ -158,5 +159,16 @@ describe('summarizeProgramStatusRecords', () => {
       root: null,
       childError: false
     })
+  })
+})
+
+describe('programStatusSummariesEqual', () => {
+  const base = { aggregate: 'working', root: 'done', childError: false } as const
+
+  it('compares every field', () => {
+    expect(programStatusSummariesEqual(base, { ...base })).toBe(true)
+    expect(programStatusSummariesEqual(base, { ...base, aggregate: 'blocked' })).toBe(false)
+    expect(programStatusSummariesEqual(base, { ...base, root: null })).toBe(false)
+    expect(programStatusSummariesEqual(base, { ...base, childError: true })).toBe(false)
   })
 })

@@ -32,6 +32,13 @@ export type ProgramStatusProjection = {
   onExit: ProgramStatusSummary | null
 }
 
+export function programStatusSummariesEqual(
+  a: ProgramStatusSummary,
+  b: ProgramStatusSummary
+): boolean {
+  return a.aggregate === b.aggregate && a.root === b.root && a.childError === b.childError
+}
+
 const URGENCY: Record<ProgramStatusSummaryState, number> = {
   blocked: 4,
   question: 4,
