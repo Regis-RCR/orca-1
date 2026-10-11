@@ -3,7 +3,12 @@ import { HeadlessEmulator } from './headless-emulator'
 import { StartupDeviceAttributesQueryFilter } from './startup-device-attributes-responder'
 import { normalizePtySize } from './daemon-pty-size'
 import type { PtyIngressEmission } from '../../shared/pty-startup-ingress'
-import type { PendingOutputRecord, TakePendingOutputResult, TerminalSnapshot } from './types'
+import type {
+  DaemonProgramStatusFact,
+  PendingOutputRecord,
+  TakePendingOutputResult,
+  TerminalSnapshot
+} from './types'
 import type { TerminalOwner } from '../../shared/terminal-owner'
 import type { SubprocessHandle } from './session-subprocess-handle'
 import { nudgePowerShellPromptRepaint } from './session-powershell-prompt-repaint'
@@ -16,6 +21,7 @@ export type AttachedClient = {
   token: symbol
   onData: (data: string, rawLength?: number, transformed?: boolean, seq?: number) => void
   onExit: (code: number, incarnationId: string, cause?: TerminalExitCause) => void
+  onProgramStatus?: (fact: DaemonProgramStatusFact) => void
 }
 
 export type SessionOutputPlaneOptions = {
@@ -94,6 +100,13 @@ export class SessionOutputPlane {
 
   snapshotClients(): AttachedClient[] {
     return this.attachedClients.slice()
+  }
+
+  /** No client, no fact: the next attach reply carries the tracker's snapshot instead. */
+  broadcastProgramStatus(fact: DaemonProgramStatusFact): void {
+    for (const client of this.attachedClients) {
+      client.onProgramStatus?.(fact)
+    }
   }
 
   broadcastExit(code: number, incarnationId: string, cause?: TerminalExitCause): void {

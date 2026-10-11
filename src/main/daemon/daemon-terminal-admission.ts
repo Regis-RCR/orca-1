@@ -183,7 +183,8 @@ export class DaemonTerminalAdmission {
       ...(result.agentSessionEnsure ? { agentSessionEnsure: result.agentSessionEnsure } : {}),
       ...(result.cwdReadableByDaemon !== undefined
         ? { cwdReadableByDaemon: result.cwdReadableByDaemon }
-        : {})
+        : {}),
+      ...(result.programStatus ? { programStatus: result.programStatus } : {})
     }
   }
 
@@ -206,6 +207,17 @@ export class DaemonTerminalAdmission {
           rawLength,
           transformed,
           seq
+        })
+      },
+      // Why the session's own client and a control entry: in order with its bytes, and never
+      // dropped by the keep-tail thinning of a backgrounded session.
+      onProgramStatus: (fact) => {
+        const routedSessionId = sessionId()
+        this.options.streamDataBatcher.enqueueControlEvent(clientId, routedSessionId, {
+          type: 'event',
+          event: 'transientFact',
+          sessionId: routedSessionId,
+          payload: fact
         })
       },
       onExit: (code, incarnationId, cause) => {

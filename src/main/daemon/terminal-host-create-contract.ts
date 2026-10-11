@@ -9,6 +9,8 @@ import type {
 } from '../../shared/agent-session-host-authority'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { TerminalExitCause } from '../../shared/terminal-exit-cause'
+import type { ProgramStatusFact } from '../../shared/program-status/program-status-slot'
+import type { DaemonProgramStatusFact } from './daemon-stream-events'
 
 export type CreateOrAttachOptions = {
   sessionId: string
@@ -38,6 +40,7 @@ export type CreateOrAttachOptions = {
   streamClient: {
     onData: (data: string, rawLength?: number, transformed?: boolean, seq?: number) => void
     onExit: (code: number, incarnationId: PtyIncarnationId, cause?: TerminalExitCause) => void
+    onProgramStatus?: (fact: DaemonProgramStatusFact) => void
   }
   /** Lets the daemon route output under the adopted owner's canonical id before
    *  attaching its stream callbacks. */
@@ -57,4 +60,5 @@ export type CreateOrAttachResult = {
   agentSessionEnsure?: AgentSessionClaimedSpawnResult
   /** Daemon-process verdict on the spawn cwd; only set on a fresh spawn that was given a cwd. */
   cwdReadableByDaemon?: boolean
+  programStatus?: ProgramStatusFact
 }

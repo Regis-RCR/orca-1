@@ -212,8 +212,11 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
       const entry = entryOf(ptyId)
       apply(entry, registerProgramStatusIncarnation(entry.ledger, snapshot, deps.now()))
     },
-    fact: (ptyId: string, fact: ProgramStatusFact): void =>
-      step(ptyId, (ledger) => applyProgramStatusFact(ledger, fact)),
+    /** A daemon fact can overtake the reply that registers its PTY: it waits in the ledger. */
+    fact(ptyId: string, fact: ProgramStatusFact): void {
+      const entry = entryOf(ptyId)
+      apply(entry, applyProgramStatusFact(entry.ledger, fact))
+    },
     /** Re-runs the lazy attribution; publishes a ledger that had no pane yet. */
     settle(ptyId: string): void {
       const entry = entries.get(ptyId)

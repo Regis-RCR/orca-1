@@ -30,6 +30,7 @@ import {
 import { HistoryReader } from './history-reader'
 import type { PtyBackgroundStreamEvent } from '../providers/pty-provider-contract'
 import type { DaemonPtyRouterDataEvent, DaemonPtyRouterExitEvent } from './daemon-pty-router-events'
+import { loseDaemonProgramStatus } from '../program-status/program-status-daemon-ingest'
 
 export type PendingDaemonSpawnOperation = {
   exitsBySessionId: Map<string, { code: number; incarnationId?: string }[]>
@@ -238,6 +239,7 @@ export abstract class DaemonPtyRuntimeState {
         this.producerResumesOwedOnReconnect.add(id)
       }
       this.pausedProducerSessionIds.clear()
+      loseDaemonProgramStatus(this.activeSessionIds)
       this.observeAuditFailure('transport_closed')
     })
   }

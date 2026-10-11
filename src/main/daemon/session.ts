@@ -81,7 +81,10 @@ export class Session {
       acceptStartupIngress: (data) => this.startupIngress.accept(data)
     })
 
-    this.startupIngress = new SessionStartupIngress(opts, this.recoveryBarrier)
+    this.startupIngress = new SessionStartupIngress(opts, this.recoveryBarrier, {
+      incarnationId: this.incarnationId,
+      emit: (fact) => this.output.broadcastProgramStatus(fact)
+    })
     this.shellReady.startPromptReadinessProbe()
     this.subprocess.onData((data) => {
       if (!this._disposed) {

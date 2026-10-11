@@ -7,6 +7,8 @@ export type PtyStartupIngressIntent = {
   colors: TerminalOscColorQueryReplyColors
   kittyKeyboardProtocol?: boolean
   deadlineMs: number
+  /** Arms the PTY owner's OSC 7501 tracker; a parser that predates the field drops it. */
+  programStatus?: { ingest: true }
 }
 
 export const PTY_STARTUP_INGRESS_VERSION = 2

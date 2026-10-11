@@ -125,7 +125,10 @@ export function applyProgramStatusFact(
   return withReport({ ...ledger, reportSeq: fact.reportSeq, observation: fact.observation })
 }
 
-/** Registration adopts max(snapshot, pending of that incarnation) and discards the other pending. */
+/**
+ * Registration adopts max(snapshot, pending of that incarnation) and discards the other pending.
+ * The incarnation already held is a reattach: a reconnect, its report first, then `live`.
+ */
 export function registerProgramStatusIncarnation(
   ledger: ProgramStatusLedger,
   snapshot: ProgramStatusFact,
@@ -133,7 +136,7 @@ export function registerProgramStatusIncarnation(
 ): ProgramStatusLedgerStep {
   const { incarnationId } = snapshot
   if (incarnationId === ledger.incarnationId) {
-    return applyProgramStatusFact(ledger, snapshot)
+    return reconnectProgramStatusLedger(ledger, snapshot, at)
   }
   const held = ledger.pending.find((entry) => entry.incarnationId === incarnationId)
   const first = held && held.reportSeq > snapshot.reportSeq ? held : snapshot

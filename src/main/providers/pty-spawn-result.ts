@@ -4,6 +4,7 @@ import type { AgentSessionClaimedSpawnResult } from '../../shared/agent-session-
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { TerminalOwner } from '../../shared/terminal-owner'
 import type { OpenCodeCliCapabilities } from '../../shared/opencode-cli-version'
+import type { ProgramStatusFact } from '../../shared/program-status/program-status-slot'
 
 export type PtySpawnResult = {
   /** Execution-host probe; absent on older hosts and reattachments. */
@@ -14,6 +15,8 @@ export type PtySpawnResult = {
   id: string
   /** Opaque provider-owned identity for this process behind a reusable PTY id. */
   incarnationId?: PtyIncarnationId
+  /** Daemon reply's OSC 7501 snapshot; the daemon provider consumes it before returning. */
+  programStatus?: ProgramStatusFact
   /** The provider observed this exact spawn exit before returning its spawn result. */
   exitedBeforeSpawnReply?: true
   /** Whether the execution host armed the shell-ready marker for a renderer-delivered startup

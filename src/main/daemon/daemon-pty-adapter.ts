@@ -3,7 +3,8 @@ import { DaemonPtyDaemonRecovery } from './daemon-pty-daemon-recovery'
 import type { DaemonPtyAdapterOptions } from './daemon-pty-runtime-state'
 import { supportsMode2031UnsubscribeFact, type DaemonEvent } from './types'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
-import type { IPtyProvider } from '../providers/pty-provider-contract'
+import type { IPtyProvider, PtySpawnOptions } from '../providers/pty-provider-contract'
+import type { PtySpawnResult } from '../providers/pty-spawn-result'
 import type { DeveloperPermissionStatus } from '../../shared/developer-permissions-types'
 import {
   AUTOMATIC_WORK_RESUME_UNSUPPORTED,
@@ -14,6 +15,10 @@ import {
 import { isUnknownRequestTypeError } from './daemon-endpoint-errors'
 import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import {
+  ingestDaemonProgramStatusFact,
+  takeDaemonProgramStatusSnapshot
+} from '../program-status/program-status-daemon-ingest'
 
 export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyProvider {
   constructor(opts: DaemonPtyAdapterOptions) {
@@ -71,6 +76,10 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
     return this.client.getDaemonIdentity()
   }
 
+  override async spawn(opts: PtySpawnOptions): Promise<PtySpawnResult> {
+    return takeDaemonProgramStatusSnapshot(this.protocolVersion, await super.spawn(opts))
+  }
+
   protected setupEventRouting(): void {
     if (this.removeEventListener) {
       return
@@ -117,6 +126,10 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
             : { sequenceChars: event.payload.sequenceChars })
         })
       } else if (event.event === 'transientFact') {
+        if (event.payload.kind === 'program-status') {
+          ingestDaemonProgramStatusFact(this.protocolVersion, event.sessionId, event.payload)
+          return
+        }
         // Why (#9993): a preserved pre-v29 daemon can retain a stale relay tracker. Its
         // unretractable subscribe is harmful; an unsubscribe is always safe to forward.
         if (

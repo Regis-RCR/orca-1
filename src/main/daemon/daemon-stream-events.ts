@@ -2,6 +2,7 @@
 import type { TerminalGitHubPRLink } from '../../shared/terminal-github-pr-link-detector'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { TerminalExitCause } from '../../shared/terminal-exit-cause'
+import type { ProgramStatusFact } from '../../shared/program-status/program-status-slot'
 
 export type DataEvent = {
   type: 'event'
@@ -78,6 +79,11 @@ export type DaemonTransientFact =
   | { kind: 'pr-link'; link: TerminalGitHubPRLink }
   | { kind: '2031-subscribe' }
   | { kind: '2031-unsubscribe' }
+  | DaemonProgramStatusFact
+
+/** OSC 7501 as the daemon's tracker saw it, before thinning, for an armed session (v50). It rides
+ *  this event, not a new one: a main below 50 falls through its switch on the unknown kind. */
+export type DaemonProgramStatusFact = { kind: 'program-status' } & ProgramStatusFact
 
 export type TransientFactEvent = {
   type: 'event'
