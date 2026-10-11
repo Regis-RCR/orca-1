@@ -714,4 +714,22 @@ describe('connectPanePty', () => {
     expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'fresh-pty')
     expect(deps.updateTabPtyId).toHaveBeenCalledWith('tab-1', 'fresh-pty')
   })
+
+  it('names the reattached PTY in the restore its bind sends', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    transportFactoryQueue.push(createMockTransport())
+    const deps = createDeps({
+      restoredLeafId: LEAF_2,
+      restoredPtyIdByLeafId: { [LEAF_2]: 'leaf-pty-2' }
+    })
+
+    connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+    await flushAsyncTicks(12)
+
+    // Why the PTY: main resyncs the pane's program status only for the pair its own maps name.
+    expect(mockStoreState.restoreAgentPaneAuthority).toHaveBeenCalledWith(
+      expect.any(String),
+      'leaf-pty-2'
+    )
+  })
 })

@@ -37,6 +37,7 @@ import {
   startupIngressByPty
 } from './local-pty-provider-state'
 import { createLocalPtyShellReadinessSession } from './local-pty-shell-readiness-session'
+import { installedProgramStatusIngress } from '../program-status/program-status-local-ingest'
 import { destroyPtyProcess, createPtyPhysicalExit } from './local-pty-termination'
 import { writeStartupCommandWhenShellReady } from './local-pty-shell-ready-startup-command'
 import type { PtySpawnOptions, PtySpawnResult } from './pty-provider-contract'
@@ -111,6 +112,9 @@ export function activateLocalPtySession(args: {
     onEmission: emitIngressData
   })
   startupIngressByPty.set(id, startupIngress)
+  if (spawn.programStatusIngest) {
+    installedProgramStatusIngress()?.local.begin(id, incarnationId)
+  }
 
   // Shell-ready startup command support
   const readiness = createLocalPtyShellReadinessSession({

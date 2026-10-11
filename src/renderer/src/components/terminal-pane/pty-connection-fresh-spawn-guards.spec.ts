@@ -522,5 +522,21 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
 
       expect(onStartupBound).toHaveBeenCalledTimes(1)
     })
+
+    it('names the spawned PTY in the restore its bind sends', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      transportFactoryQueue.push(createMockTransport('pty-fresh'))
+      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
+        | ((ptyId: string) => void)
+        | undefined
+      onPtySpawn?.('pty-fresh')
+
+      // Why the PTY: main resyncs the pane's program status only for the pair its own maps name.
+      expect(mockStoreState.restoreAgentPaneAuthority).toHaveBeenCalledWith(
+        expect.any(String),
+        'pty-fresh'
+      )
+    })
   })
 }

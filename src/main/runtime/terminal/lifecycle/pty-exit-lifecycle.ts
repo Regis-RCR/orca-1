@@ -9,6 +9,7 @@ import { SSH_EXIT_UNCONFIRMED_REASON } from '../../../../shared/pty-liveness-ver
 import type { RetiredTerminalSurface } from '../../mobile-session-terminal-retirement'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
+import { installedProgramStatusIngress } from '../../../program-status/program-status-local-ingest'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
 import type {
   RuntimePtyWorktreeRecord,
@@ -86,6 +87,9 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     if (processDeathCertified && exitPaneKeys.size > 0) {
       this.reconcileAgentStatusForEndedProcessFn?.(exitPaneKeys)
     }
+    // Why apart from the hook reconcile: done and error outlive the process; an unconfirmed loss
+    // keeps the view, only marked unverifiable.
+    installedProgramStatusIngress()?.local.exit(ptyId, processDeathCertified)
     const incarnationId =
       exitIncarnationId ??
       pty?.incarnationId ??

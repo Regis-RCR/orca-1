@@ -150,7 +150,7 @@ export function createAgentStatusAuthorityActions(
     // turn-triggered revival leaves exactly the reported permanent suppression
     // (STA-4114). This deliberately does NOT restore the rows retirement dropped;
     // those are genuinely stale. It only re-opens the pane to future status.
-    restoreAgentPaneAuthority: (paneKey) => {
+    restoreAgentPaneAuthority: (paneKey, ptyId) => {
       const ownerPaneKey = resolveAgentPaneAuthorityKey(paneKey)
       // Why: a closed tab is a stronger, separate claim — re-attach must not undo it.
       if (
@@ -185,7 +185,7 @@ export function createAgentStatusAuthorityActions(
       // main's survives. Gating the send on a local tombstone reintroduces STA-4114 for
       // exactly those panes. The send is idempotent and main refuses closed tabs itself.
       if (typeof window !== 'undefined') {
-        window.api?.agentStatus?.restorePaneAuthority?.(ownerPaneKey)
+        window.api?.agentStatus?.restorePaneAuthority?.(ownerPaneKey, ptyId)
       }
     },
     transferAgentPaneAuthority: ({ fromPaneKey, toPaneKey, ptyId }) => {

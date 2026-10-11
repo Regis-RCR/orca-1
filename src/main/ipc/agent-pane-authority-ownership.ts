@@ -3,6 +3,11 @@ export type AgentPaneAuthorityOwnershipSources = {
   getRuntimeTerminalHandleForPaneKey?: (paneKey: string) => string | undefined
 }
 
+export type AgentPaneBindingSources = AgentPaneAuthorityOwnershipSources & {
+  getPaneKeyForPty?: (ptyId: string) => string | undefined
+  resolvePaneKeyAlias: (paneKey: string) => string
+}
+
 function getRemoteRuntimeHandle(ptyId: string): string | null {
   if (!ptyId.startsWith('remote:')) {
     return null
@@ -40,5 +45,28 @@ export function createAgentPaneAuthorityOwnership(
     }
     const runtimeHandle = sources.getRuntimeTerminalHandleForPaneKey?.(paneKey)
     return Boolean(runtimeHandle && getRemoteRuntimeHandle(ptyId) === runtimeHandle)
+  }
+}
+
+/**
+ * Both sides of main's binding, compared canonically: the PTY still holds its own spawn key, that
+ * key and `paneKey` are alias-equal, and no other PTY holds the canonical target key.
+ */
+export function createAgentPaneBindingProof(
+  sources: AgentPaneBindingSources
+): (paneKey: string, ptyId: string) => boolean {
+  const { getPtyIdForPaneKey: ptyAt, resolvePaneKeyAlias: canonical } = sources
+  const ownsRemotePty = createAgentPaneAuthorityOwnership({
+    getRuntimeTerminalHandleForPaneKey: sources.getRuntimeTerminalHandleForPaneKey
+  })
+  return (paneKey, ptyId) => {
+    const spawnKey = sources.getPaneKeyForPty?.(ptyId)
+    const target = canonical(paneKey)
+    const bound =
+      spawnKey !== undefined &&
+      ptyAt?.(spawnKey) === ptyId &&
+      canonical(spawnKey) === target &&
+      (ptyAt?.(target) ?? ptyId) === ptyId
+    return bound || ownsRemotePty(paneKey, ptyId)
   }
 }

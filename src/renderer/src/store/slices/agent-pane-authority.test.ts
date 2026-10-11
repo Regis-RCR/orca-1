@@ -116,9 +116,10 @@ describe('agent pane authority', () => {
     store.getState().setAgentStatus(TARGET, { state: 'done', prompt: 'turn in flight' })
     expect(store.getState().agentStatusByPaneKey[TARGET]).toBeUndefined()
 
-    store.getState().restoreAgentPaneAuthority(TARGET)
+    store.getState().restoreAgentPaneAuthority(TARGET, 'pty-bound')
     expect(store.getState().recentlyRetiredAgentStatusPaneKeys[TARGET]).toBeUndefined()
-    expect(restorePaneAuthority).toHaveBeenCalledWith(TARGET)
+    // The bound PTY rides along so main can resync the pane's program status.
+    expect(restorePaneAuthority).toHaveBeenCalledWith(TARGET, 'pty-bound')
 
     store.getState().setAgentStatus(TARGET, { state: 'done', prompt: 'turn in flight' })
     expect(store.getState().agentStatusByPaneKey[TARGET]?.state).toBe('done')

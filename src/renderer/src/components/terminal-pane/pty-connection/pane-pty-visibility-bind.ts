@@ -89,7 +89,7 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     session.registerSideEffectFactConsumerForPty(ptyId)
     session.syncHiddenRendererPtyDelivery()
     // A live bind proves this pane is current again after detach/reattach.
-    useAppStore.getState().restoreAgentPaneAuthority?.(session.cacheKey)
+    useAppStore.getState().restoreAgentPaneAuthority?.(session.cacheKey, ptyId)
     notifyCodexPaneBoundForStaleSweep(ptyId)
     const tabPtyIds = useAppStore.getState().ptyIdsByTabId?.[session.deps.tabId] ?? []
     const updateTabPtyBinding = (): void => {

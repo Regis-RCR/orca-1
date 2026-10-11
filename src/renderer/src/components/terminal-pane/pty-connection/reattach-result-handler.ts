@@ -221,7 +221,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     }
     // Keep layout sync after the identity commit; replacement paths are atomic.
     session.syncPanePtyLayoutBinding(ptyId)
-    useAppStore.getState().restoreAgentPaneAuthority?.(session.cacheKey)
+    useAppStore.getState().restoreAgentPaneAuthority?.(session.cacheKey, ptyId)
     notifyCodexPaneBoundForStaleSweep(ptyId)
     session.agentCompletionCoordinator.startProcessTracking()
     session.sampleVisiblePaneForegroundAgent()

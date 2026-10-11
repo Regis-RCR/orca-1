@@ -93,7 +93,7 @@ export type AgentStatusSlice = {
     options?: { preserveSleepingAgentSession?: boolean }
   ) => void
   /** Lift a pane's retirement fence once a live PTY re-attaches to it. Closed tabs stay retired. */
-  restoreAgentPaneAuthority: (paneKey: string) => void
+  restoreAgentPaneAuthority: (paneKey: string, ptyId?: string) => void
   transferAgentPaneAuthority: (args: {
     fromPaneKey: string
     toPaneKey: string

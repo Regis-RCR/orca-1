@@ -86,8 +86,8 @@ export const agentStatusApi = {
   retirePaneAuthority: (paneKey: string, retirementId?: string): void => {
     ipcRenderer.send('agentStatus:retirePaneAuthority', paneKey, retirementId)
   },
-  restorePaneAuthority: (paneKey: string): void => {
-    ipcRenderer.send('agentStatus:restorePaneAuthority', paneKey)
+  restorePaneAuthority: (paneKey: string, ptyId?: string): void => {
+    ipcRenderer.send('agentStatus:restorePaneAuthority', paneKey, ptyId)
   },
   transferPaneAuthority: (args: {
     fromPaneKey: string

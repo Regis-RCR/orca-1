@@ -20,6 +20,7 @@ import {
   tailGainedNewerBlockedReason
 } from '../../terminal-wait-tail-state'
 import { extractOscTitleScanTail } from '../../../../shared/osc-title-scan-tail'
+import { installedProgramStatusIngress } from '../../../program-status/program-status-local-ingest'
 
 export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePtyExecutionContext {
   protected abstract recordOsc7MetadataForPty(
@@ -105,6 +106,7 @@ export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePty
     const cwd = osc7Metadata.cwd
     const cwdChanged = osc7Metadata.cwdChanged
     const agentStatusChunk = this.processAgentStatusOscForPty(ptyId, data)
+    installedProgramStatusIngress()?.local.observe(ptyId, data, at)
     this.recordRecentPtyOutputForPathProvenance(ptyId, data)
     // Why: watch terminal output for advertised dev-server URLs (e.g. Vite's
     // `Network: https://local.example.com:3001/`) so the workspace ports

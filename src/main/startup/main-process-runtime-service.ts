@@ -42,6 +42,8 @@ import {
 } from '../runtime/agent-status-observed-pane-identity'
 import { startAgentStateRulesLiveUpdates } from '../runtime/agent-state-rules/agent-state-rules-live-update'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
+import { createProgramStatusIngress } from '../program-status/program-status-ingress'
+import { installProgramStatusIngress } from '../program-status/program-status-local-ingest'
 
 export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   const activation = state.desktopActivationGate
@@ -147,6 +149,21 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   )
   state.runtime = runtime
   runtime.sidebarFacts?.workspaceActivityFacts.attachAgentStatusStore(agentHookServer)
+  installProgramStatusIngress(
+    createProgramStatusIngress({
+      sink: {
+        report: (target, write) => agentHookServer.ingestProgramStatusReport({ ...target, write }),
+        lifecycle: (paneKey, write) => agentHookServer.applyProgramStatusLifecycle(paneKey, write),
+        rekey: (from, to, identity, current) =>
+          agentHookServer.rekeyProgramStatus(from, to, identity, current),
+        forget: (paneKey, identity, options) =>
+          agentHookServer.forgetProgramStatus(paneKey, identity, options)
+      },
+      resolveTarget: (ptyId) => runtime.resolveProgramStatusPaneTarget(ptyId),
+      resolvePaneKey: (paneKey) => agentHookServer.resolveProgramStatusPaneKey(paneKey),
+      now: Date.now
+    })
+  )
   agentHookServer.subscribeEnrichedStatus((enriched) =>
     recordObservedAgentStatusPaneIdentity(observedPaneIdentities, enriched.paneKey, runtime)
   )

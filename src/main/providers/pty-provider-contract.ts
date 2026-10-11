@@ -108,6 +108,8 @@ export type PtySpawnOptions = {
   startupIngress?: PtyStartupIngressIntent
   /** Why the caller is starting this terminal; presence lets the host defer an automatic restore. */
   spawnIntent?: SpawnIntent
+  /** Local PTYs: track OSC 7501 program status in main from the first byte. */
+  programStatusIngest?: true
   agentSessionEnsure?: {
     claim: AgentSessionExecutionClaim
     surface: AgentSessionSurfaceBinding

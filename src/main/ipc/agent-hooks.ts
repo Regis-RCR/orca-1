@@ -10,7 +10,10 @@ import { agentHookServer } from '../agent-hooks/server'
 import { getMigrationUnsupportedPtySnapshot } from '../agent-hooks/migration-unsupported-pty-state'
 import { registerAgentPaneAuthorityIpcHandlers } from './agent-pane-authority-ipc'
 import { registerAgentStatusRowTeardownIpcHandlers } from './agent-status-row-teardown-ipc'
-import { createAgentPaneAuthorityOwnership } from './agent-pane-authority-ownership'
+import {
+  createAgentPaneAuthorityOwnership,
+  createAgentPaneBindingProof
+} from './agent-pane-authority-ownership'
 import {
   enrichAgentStatusIpcPayload,
   type AgentStatusRuntimeEnrichment
@@ -18,6 +21,7 @@ import {
 
 type AgentHookHandlerDependencies = {
   getPtyIdForPaneKey?: (paneKey: string) => string | undefined
+  getPaneKeyForPty?: (ptyId: string) => string | undefined
 }
 
 // Why: install/remove are intentionally not exposed to the renderer. Orca
@@ -40,11 +44,17 @@ export function registerAgentHookHandlers(
   ipcMain.removeHandler('agentStatus:hasVerifiableAgentProcess')
   ipcMain.removeHandler('agentStatus:getMigrationUnsupportedSnapshot')
   registerAgentStatusRowTeardownIpcHandlers()
+  const ownershipSources = {
+    getPtyIdForPaneKey: dependencies.getPtyIdForPaneKey,
+    getRuntimeTerminalHandleForPaneKey: (paneKey: string) =>
+      runtime?.getAgentStatusTerminalHandleForPaneKey(paneKey)
+  }
   registerAgentPaneAuthorityIpcHandlers({
-    ownsPty: createAgentPaneAuthorityOwnership({
-      getPtyIdForPaneKey: dependencies.getPtyIdForPaneKey,
-      getRuntimeTerminalHandleForPaneKey: (paneKey) =>
-        runtime?.getAgentStatusTerminalHandleForPaneKey(paneKey)
+    ownsPty: createAgentPaneAuthorityOwnership(ownershipSources),
+    bindsPane: createAgentPaneBindingProof({
+      ...ownershipSources,
+      getPaneKeyForPty: dependencies.getPaneKeyForPty,
+      resolvePaneKeyAlias: (paneKey) => agentHookServer.resolveProgramStatusPaneKey(paneKey)
     })
   })
   ipcMain.handle(

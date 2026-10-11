@@ -81,15 +81,17 @@ export abstract class AgentHookServerProgramStatus extends AgentHookServerListen
     current: ProgramStatusReportWrite
   ): boolean {
     const [fromKey, toKey] = [fromPaneKey, to.paneKey].map((key) => this.resolvePaneKeyAlias(key))
-    const moved = this.programStatusByPaneKey.get(fromKey)
+    // Why the raw key too: a record written before a leaf move's alias still sits under it.
+    const sourceKey = this.programStatusByPaneKey.has(fromKey) ? fromKey : fromPaneKey
+    const moved = this.programStatusByPaneKey.get(sourceKey)
     if (!moved || !sameIdentity(moved.slot, identity)) {
       // Why: the source pane's closure may already have forgotten the record, as in a leaf move.
       return this.writeProgramStatus(to, current)
     }
-    if (fromKey === toKey) {
+    if (sourceKey === toKey) {
       return false
     }
-    this.deleteProgramStatusRecord(fromKey)
+    this.deleteProgramStatusRecord(sourceKey)
     const held = this.programStatusByPaneKey.get(toKey)?.slot
     if (
       !this.isProgramStatusPaneClosed(toKey) &&
@@ -175,6 +177,11 @@ export abstract class AgentHookServerProgramStatus extends AgentHookServerListen
         true
       )
     }
+  }
+
+  /** Read-only: the canonical key every slot operation resolves to. */
+  resolveProgramStatusPaneKey(paneKey: string): string {
+    return this.resolvePaneKeyAlias(paneKey)
   }
 
   getProgramStatusSnapshot(): Row[] {

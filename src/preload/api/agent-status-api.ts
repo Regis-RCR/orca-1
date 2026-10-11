@@ -46,7 +46,7 @@ export type AgentStatusApi = {
   /** Permanently retire one pane's hook authority while siblings stay live. */
   retirePaneAuthority: (paneKey: string, retirementId?: string) => void
   /** Lift one pane's retirement fence when a live PTY re-attaches to it. Closed tabs stay retired. */
-  restorePaneAuthority: (paneKey: string) => void
+  restorePaneAuthority: (paneKey: string, ptyId?: string) => void
   /** Move hook authority when a live pane is detached into another tab. */
   transferPaneAuthority: (args: { fromPaneKey: string; toPaneKey: string; ptyId?: string }) => void
 }

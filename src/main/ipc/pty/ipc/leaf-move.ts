@@ -2,8 +2,10 @@ import { getPtyIpc } from '../../pty-host-bindings'
 import type { Store } from '../../../persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { rekeyMovedPaneOwners } from '../../../runtime/moved-pane-owner-rekey'
+import { notifyPaneKeyBinding } from '../pane/key-state'
 import {
   isTerminalLeafMoveRequest,
+  terminalLeafMovePaneKeys,
   type TerminalLeafMoveRequest,
   type TerminalLeafMoveResult
 } from '../../../../shared/terminal-leaf-move'
@@ -21,6 +23,7 @@ export async function commitLeafMoveAndRekey(
     return result
   }
   rekeyMovedPaneOwners(deps.runtime, { ...request, ptyId: result.ptyId })
+  notifyPaneKeyBinding(terminalLeafMovePaneKeys(request).to)
   return result
 }
 

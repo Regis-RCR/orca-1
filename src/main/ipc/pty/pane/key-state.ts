@@ -9,6 +9,18 @@ export function getPtyIdForPaneKey(paneKey: string): string | undefined {
   return paneKeyPtyId.get(paneKey)
 }
 
+export function getPaneKeyForPty(ptyId: string): string | undefined {
+  return ptyPaneKey.get(ptyId)
+}
+
+// Why: a binding proof parked before the spawn or leaf-move commit is re-read once main agrees.
+export const paneKeyBindingListeners = new Set<(paneKey: string) => void>()
+
+/** Deferred to a microtask so the commit registers its pane-key alias before anyone reads it. */
+export function notifyPaneKeyBinding(paneKey: string): void {
+  queueMicrotask(() => paneKeyBindingListeners.forEach((listener) => listener(paneKey)))
+}
+
 // Why: let consumers tear down paneKey-scoped state on PTY exit so their timers can't leak; a callback registry keeps the cross-module dependency narrow.
 export type PaneKeyTeardownListener = (paneKey: string) => void
 export const paneKeyTeardownListeners = new Set<PaneKeyTeardownListener>()
@@ -43,5 +55,6 @@ export function rememberPaneKeyForPty(ptyId: string, paneKey: unknown): string |
   }
   ptyPaneKey.set(ptyId, normalizedPaneKey)
   paneKeyPtyId.set(normalizedPaneKey, ptyId)
+  notifyPaneKeyBinding(normalizedPaneKey)
   return normalizedPaneKey
 }
