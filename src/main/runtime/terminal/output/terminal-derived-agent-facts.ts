@@ -10,6 +10,7 @@ import { splitWorktreeIdForFilesystem } from '../../../../shared/worktree/id'
 import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
 import type { ProcessedAgentStatusChunk } from '../../../../shared/agent-status-osc'
 import { mapExplicitAgentStateToRuntimeTerminalStatus } from '../../runtime-worktree-status-projection'
+import { resolveRuntimePtyPaneTargets } from '../../runtime-pty-pane-attribution'
 
 export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector extends OrcaRuntimeWithApplyTrackedPtyTitle {
   abstract getAgentStatusTerminalHandleForPaneKey(paneKey: string): string | undefined
@@ -94,38 +95,11 @@ export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector
     if (chunk.payloads.length === 0) {
       return
     }
-    const targets = new Map<
-      string,
-      {
-        source: 'mounted-leaf' | 'pty-record'
-        paneKey: string
-        tabId?: string
-        worktreeId?: string
-        connectionId?: string | null
-        terminalHandle?: string
-      }
-    >()
-    const pty = this.ptysById.get(ptyId)
-    const connectionId = pty?.connectionId ?? null
-    for (const leaf of this.getLeavesForPty(ptyId)) {
-      const paneKey = this.makeRuntimePaneKey(leaf)
-      targets.set(paneKey, {
-        source: 'mounted-leaf',
-        paneKey,
-        tabId: leaf.tabId,
-        worktreeId: leaf.worktreeId,
-        connectionId
-      })
-    }
-    if (targets.size === 0 && pty?.paneKey) {
-      targets.set(pty.paneKey, {
-        source: 'pty-record',
-        paneKey: pty.paneKey,
-        tabId: pty.tabId ?? undefined,
-        worktreeId: pty.worktreeId,
-        connectionId
-      })
-    }
+    const targets = resolveRuntimePtyPaneTargets(
+      this.ptysById.get(ptyId),
+      this.getLeavesForPty(ptyId),
+      (leaf) => this.makeRuntimePaneKey(leaf)
+    )
     // Why once per chunk and not per payload: the same lookup the renderer-facing IPC boundary
     // runs, and it is the pane's only durable join back to its terminal once the pane key moves.
     if (this.onTerminalAgentStatus) {
