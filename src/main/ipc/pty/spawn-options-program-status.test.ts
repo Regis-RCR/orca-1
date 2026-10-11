@@ -19,6 +19,8 @@ import {
   claimProgramStatusDesktopHost,
   resetProgramStatusDesktopHostForTests
 } from '../../program-status/program-status-host-authority'
+import { PtyStartupIngress } from '../../../shared/pty-startup-ingress'
+import { PROGRAM_STATUS_PROBE_REPLY } from '../../../shared/pty-startup-program-status-probe'
 
 type BuildInput = {
   worktreeId?: string
@@ -142,7 +144,7 @@ describe.each(['renderer', 'runtime'] as const)('%s spawn builder OSC 7501 inges
       { daemon, launchAgent: 'claude' as const, command: 'claude' }
     ]) {
       const options = await build(route, input)
-      expect(options.startupIngress?.programStatus).toEqual({ ingest: true })
+      expect(options.startupIngress?.programStatus).toEqual({ ingest: true, answerProbe: true })
       expect(options.programStatusIngest).toBe(true)
     }
   })
@@ -188,4 +190,25 @@ describe.each(['renderer', 'runtime'] as const)('%s spawn builder OSC 7501 inges
     const outlet = { incarnationId: 'inc-1', emit: vi.fn() }
     expect(createDaemonProgramStatusRelay(options.startupIngress, outlet)).toBeNull()
   })
+})
+
+describe('the Node orcad server answers no OSC 7501 probe', () => {
+  it.each(['renderer', 'runtime'] as const)(
+    '%s spawn: the owner passes it through',
+    async (route) => {
+      onPlatform('darwin')
+      asOrcad()
+      const options = await build(route, { daemon: true, launchAgent: 'claude', command: 'claude' })
+      const writes: string[] = []
+      const emitted: string[] = []
+      const owner = new PtyStartupIngress({
+        ...(options.startupIngress ? { intent: options.startupIngress } : {}),
+        write: (data) => writes.push(data),
+        onEmission: (emission) => emitted.push(emission.data)
+      })
+      owner.accept('\x1b]7501;?\x07')
+      expect(writes).not.toContain(PROGRAM_STATUS_PROBE_REPLY)
+      expect(emitted.join('')).toBe('\x1b]7501;?\x07')
+    }
+  )
 })

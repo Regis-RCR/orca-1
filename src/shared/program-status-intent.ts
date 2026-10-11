@@ -1,14 +1,23 @@
-/** What a spawn asks of the PTY owner for OSC 7501: track every report it emits. */
-export type ProgramStatusIntent = { ingest: true }
+/** What a spawn asks of the PTY owner for OSC 7501: track every report it emits, and answer the
+ *  support probe ahead of DA1. */
+export type ProgramStatusIntent = { ingest: true; answerProbe?: true }
 
 /** Who owns the PTY bytes: main, the persistent daemon, or an SSH relay. */
 export type ProgramStatusOwnerProvider = 'local' | 'daemon' | 'relay'
 
 /** Strict: anything but `{ ingest: true }` arms nothing, and unknown fields are dropped. */
 export function parseProgramStatusIntent(value: unknown): ProgramStatusIntent | undefined {
-  return typeof value === 'object' && value !== null && 'ingest' in value && value.ingest === true
-    ? { ingest: true }
-    : undefined
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('ingest' in value) ||
+    value.ingest !== true
+  ) {
+    return undefined
+  }
+  return 'answerProbe' in value && value.answerProbe === true
+    ? { ingest: true, answerProbe: true }
+    : { ingest: true }
 }
 
 /**
@@ -22,7 +31,7 @@ export function resolveProgramStatusIntent(target: {
   serveMode: boolean
 }): ProgramStatusIntent | undefined {
   return target.platform === 'darwin' && target.provider !== 'relay' && !target.serveMode
-    ? { ingest: true }
+    ? { ingest: true, answerProbe: true }
     : undefined
 }
 

@@ -15,6 +15,15 @@ describe('parseProgramStatusIntent', () => {
     expect(parseProgramStatusIntent({ ingest: true, future: 1 })).toEqual({ ingest: true })
   })
 
+  it('keeps the probe answer only beside ingestion, and only when exactly true', () => {
+    expect(parseProgramStatusIntent({ ingest: true, answerProbe: true })).toEqual({
+      ingest: true,
+      answerProbe: true
+    })
+    expect(parseProgramStatusIntent({ ingest: true, answerProbe: 'yes' })).toEqual({ ingest: true })
+    expect(parseProgramStatusIntent({ answerProbe: true })).toBeUndefined()
+  })
+
   it.each([undefined, null, true, 'ingest', { ingest: 'true' }, { ingest: 1 }, {}, []])(
     'refuses %j',
     (value) => {
@@ -27,9 +36,9 @@ describe('resolveProgramStatusIntent: the announced scope', () => {
   const resolve = (platform: string, provider: ProgramStatusOwnerProvider, serveMode = false) =>
     resolveProgramStatusIntent({ platform, provider, serveMode })
 
-  it('ingests on macOS desktop local and daemon PTYs', () => {
-    expect(resolve('darwin', 'local')).toEqual({ ingest: true })
-    expect(resolve('darwin', 'daemon')).toEqual({ ingest: true })
+  it('ingests and answers the probe on macOS desktop local and daemon PTYs', () => {
+    expect(resolve('darwin', 'local')).toEqual({ ingest: true, answerProbe: true })
+    expect(resolve('darwin', 'daemon')).toEqual({ ingest: true, answerProbe: true })
   })
 
   it.each([
