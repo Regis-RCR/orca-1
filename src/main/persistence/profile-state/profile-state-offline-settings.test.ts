@@ -74,6 +74,36 @@ describe.each(['json', 'sqlite'] as const)('offline settings %s updates', (backe
       authority.close()
     }
   })
+
+  // Why pinned: the offline CLI owns hook installation only; the desktop OSC 7501 preference
+  // rides through its settings write untouched rather than through a projection of its own.
+  it('keeps the desktop OSC 7501 preference through an offline hook update', () => {
+    const location = createLocation()
+    const original = {
+      settings: { agentStatusHooksEnabled: true, agentProgramStatusPreferred: true }
+    }
+    const authority = new ProfileStateSqliteAuthority(location.databaseFile, location.profileId)
+    try {
+      if (backend === 'sqlite') {
+        authority.writeSerializedState(Buffer.from(JSON.stringify(original)))
+      } else {
+        writeFileSync(location.dataFile, JSON.stringify(original))
+      }
+      authority.close()
+      updateAgentHookSettingsFromProfileState(location, false)
+      const reopened = new ProfileStateSqliteAuthority(location.databaseFile, location.profileId)
+      try {
+        expect(JSON.parse(reopened.readSerializedState() ?? 'null').settings).toMatchObject({
+          agentStatusHooksEnabled: false,
+          agentProgramStatusPreferred: true
+        })
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      authority.close()
+    }
+  })
 })
 
 describe.each(['read', 'update'] as const)('offline settings %s recovery', (operation) => {

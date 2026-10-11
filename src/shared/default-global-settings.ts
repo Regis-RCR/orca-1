@@ -226,6 +226,7 @@ export function buildDefaultSettings(args: {
     agentDefaultEnv: { ...DEFAULT_TUI_AGENT_ENV },
     agentYoloDefaultsMigrated: true,
     agentStatusHooksEnabled: true,
+    agentProgramStatusPreferred: false,
     agentWorkspaceTrustEnabled: true,
     codexTerminalServerIsolation: true,
     codexSharedServerWarning: true,

@@ -106,6 +106,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/hermes/hermes-config-remote-adapter.test.ts',
   'src/main/ipc/orca-profiles-switch-persistence.test.ts',
   'src/main/ipc/settings-delayed-response.test.ts',
+  'src/main/ipc/settings-program-status.test.ts',
   'src/main/runtime/structured-agent-session-startup-tab-restore.test.ts',
   'src/main/runtime/structured-agent-session-windowless-layout-host.test.ts',
   'src/shared/remote-runtime-shared-control-connection.test.ts',

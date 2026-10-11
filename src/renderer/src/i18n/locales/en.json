@@ -384,7 +384,11 @@
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
       "save": "Save",
-      "clearDefault": "Clear default agent"
+      "clearDefault": "Clear default agent",
+      "agentProgramStatusPreferred": {
+        "title": "Prefer status reported in the terminal",
+        "description": "Some agents report their status in the terminal (OSC 7501). When on, that status is shown instead of the hook status. When off, hooks come first and the terminal status shows only where no hook reports."
+      }
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",

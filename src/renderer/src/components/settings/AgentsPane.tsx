@@ -4,6 +4,7 @@ import type { AgentPermissionMode } from '../../../../shared/tui-agent-permissio
 import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useAppStore } from '@/store'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
+import { AgentProgramStatusSetting } from './AgentProgramStatusSetting'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
 import { CodexTerminalServerIsolationSetting } from './CodexTerminalServerIsolationSetting'
@@ -159,6 +160,7 @@ export function AgentsPane({
         <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
         {!isPairedWebClientWindow() ? (
           <>
+            <AgentProgramStatusSetting settings={settings} updateSettings={updateSettings} />
             <AgentWorkspaceTrustSetting settings={settings} updateSettings={updateSettings} />
             <CodexTerminalServerIsolationSetting
               settings={settings}

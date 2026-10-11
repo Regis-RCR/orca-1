@@ -41,6 +41,7 @@ import {
 } from '../../shared/computer-awake-mode'
 import { resolveAiVaultSearchSettings } from '../../shared/ai-vault-search-settings'
 import { applySessionSearchSettingsChange } from '../ai-vault-search/session-search-enablement'
+import { withStrictProgramStatusPreference } from './settings-program-status'
 
 // Why: the whitelist is the source-of-truth for which keys we emit on. Casting
 // to a Set once at module load lets the IPC handler's per-key membership
@@ -59,7 +60,7 @@ function sanitizeRendererSettingsUpdate(args: Partial<GlobalSettings>): Partial<
   // writes must pass the dedicated reviewed-fingerprint handlers.
   delete sanitizedArgs.pluginConsents
   delete sanitizedArgs.disabledPlugins
-  return sanitizedArgs
+  return withStrictProgramStatusPreference(sanitizedArgs)
 }
 
 // Why: fields that appear in the View > Appearance submenu need the menu

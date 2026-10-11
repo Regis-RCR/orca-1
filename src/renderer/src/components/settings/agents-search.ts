@@ -21,6 +21,11 @@ import {
 } from './agent-workspace-trust-copy'
 import { getAgentCacheTimerSearchEntries } from './agent-cache-timer-search'
 import {
+  getAgentProgramStatusDescription,
+  getAgentProgramStatusSearchKeywords,
+  getAgentProgramStatusTitle
+} from './agent-program-status-copy'
+import {
   getCodexTerminalServerIsolationDescription,
   getCodexTerminalServerIsolationSearchKeywords,
   getCodexTerminalServerIsolationTitle
@@ -71,12 +76,14 @@ function expandAgentSearchText(value: string): string[] {
 
 type AgentsPaneSearchOptions = {
   includeAgentAwake?: boolean
+  includeAgentProgramStatus?: boolean
   includeAgentRuntime?: boolean
   includeAgentWorkspaceTrust?: boolean
   includeCodexTerminalServerIsolation?: boolean
 }
 
 const AGENT_AWAKE_SEARCH_ENTRY_ID = 'agent-awake'
+const AGENT_PROGRAM_STATUS_SEARCH_ENTRY_ID = 'agent-program-status'
 const AGENT_WORKSPACE_TRUST_SEARCH_ENTRY_ID = 'agent-workspace-trust'
 const AGENT_RUNTIME_SEARCH_ENTRY_ID = 'agent-runtime'
 const CODEX_TERMINAL_SERVER_ISOLATION_SEARCH_ENTRY_ID = 'codex-terminal-server-isolation'
@@ -121,6 +128,12 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
     title: getAgentStatusHooksTitle(),
     description: getAgentStatusHooksDescription(),
     keywords: getAgentStatusHooksSearchKeywords()
+  },
+  {
+    title: getAgentProgramStatusTitle(),
+    id: AGENT_PROGRAM_STATUS_SEARCH_ENTRY_ID,
+    description: getAgentProgramStatusDescription(),
+    keywords: getAgentProgramStatusSearchKeywords()
   },
   {
     title: getAgentWorkspaceTrustTitle(),
@@ -171,6 +184,7 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
 
 export function getAgentsPaneSearchEntries({
   includeAgentAwake = true,
+  includeAgentProgramStatus = true,
   includeAgentRuntime = true,
   includeAgentWorkspaceTrust = true,
   includeCodexTerminalServerIsolation = true
@@ -178,6 +192,9 @@ export function getAgentsPaneSearchEntries({
   const hiddenIds = new Set<string>()
   if (!includeAgentAwake) {
     hiddenIds.add(AGENT_AWAKE_SEARCH_ENTRY_ID)
+  }
+  if (!includeAgentProgramStatus) {
+    hiddenIds.add(AGENT_PROGRAM_STATUS_SEARCH_ENTRY_ID)
   }
   if (!includeAgentRuntime) {
     hiddenIds.add(AGENT_RUNTIME_SEARCH_ENTRY_ID)
