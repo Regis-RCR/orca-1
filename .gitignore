@@ -121,6 +121,8 @@ docs/**
 !docs/audits/crashpad-read-limit/
 !docs/audits/crashpad-read-limit/source-hashes.json
 !docs/agent-skill-sharing-implementation-checklist.md
+!docs/design/
+!docs/design/osc7501-program-status.md
 !docs/mobile-terminal-shortcut-bar.md
 
 # Stably CLI (only docs/ are tracked)
