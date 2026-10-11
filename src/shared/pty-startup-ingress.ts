@@ -1,8 +1,8 @@
 import { nextQueryCandidate, parsePtyStartupQuery } from './pty-startup-query'
 import { PtyOwnerColorQueryReplies } from './pty-owner-color-query-replies'
 import { TerminalKittyKeyboardModeTracker } from './terminal-kitty-keyboard-mode-tracker'
-import type { TerminalOscColorQuerySlot } from './terminal-osc-color-reply'
 import type { PtyOwnerBackend } from './pty-owner-backend'
+import { answerPtyStartupQuery, type PtyStartupQueryAnswerer } from './pty-startup-query-answer'
 import { PtyStartupReplyDelivery } from './pty-startup-reply-delivery'
 import { deliverTerminalQueryReplyPayload } from './terminal-query-reply-delivery'
 import {
@@ -50,6 +50,7 @@ export class PtyStartupIngress {
   private closed = false
   private kittyQueryOpen: boolean
   private readonly kittyModes = new TerminalKittyKeyboardModeTracker()
+  private readonly queryAnswerer: PtyStartupQueryAnswerer
   private rawHighWater = 0
   private queryPending: PtyIngressSourceSpan | null = null
   private echoPending: PtyIngressSourceSpan | null = null
@@ -65,6 +66,12 @@ export class PtyStartupIngress {
       options.write,
       Date.now() + (options.intent?.deadlineMs ?? DEFAULT_STARTUP_WINDOW_MS)
     )
+    this.queryAnswerer = {
+      delivery: this.delivery,
+      colorQueries: this.colorQueries,
+      kittyModes: this.kittyModes,
+      ownerBackend: this.ownerBackend
+    }
     this.onEmission = options.onEmission
     this.kittyQueryOpen = options.intent?.kittyKeyboardProtocol === true
     if (options.intent && this.kittyQueryOpen) {
@@ -251,7 +258,6 @@ export class PtyStartupIngress {
     const input = combinePtyIngressSourceSpans(this.queryPending, span)
     this.queryPending = null
     this.clearQueryHold()
-    const suppressConptyQuery = this.ownerBackend === 'windows-conpty'
 
     let scanOffset = 0
     let emittedOffset = 0
@@ -284,32 +290,14 @@ export class PtyStartupIngress {
         this.emit(slicePtyIngressSourceSpan(input, emittedOffset, candidateIndex), false)
       }
       const querySpan = slicePtyIngressSourceSpan(input, candidateIndex, query.endIndex)
-      const answered =
-        query.kind === 'kitty'
-          ? this.delivery.answer(`\x1b[?${this.kittyModes.flags}u`, 'owner')
-          : this.answerColorQuery(query.slots)
-      if (query.kind === 'kitty' && answered) {
+      const answer = answerPtyStartupQuery(query, this.queryAnswerer)
+      if (answer.closesKittyQuery) {
         this.kittyQueryOpen = false
       }
-      // A failed write passes the query on, except under ConPTY, whose ESC-stripped
-      // echo of a downstream reply would leak into a cooked shell (#9651).
-      if (answered || (suppressConptyQuery && query.kind !== 'kitty')) {
-        this.emit(querySpan, true, '')
-      } else {
-        this.emit(querySpan, false)
-      }
+      this.emit(querySpan, answer.stripped, answer.stripped ? '' : querySpan.data)
       scanOffset = query.endIndex
       emittedOffset = query.endIndex
     }
-  }
-
-  /** True when at least the first reply landed; a failed write stops the rest in order. */
-  private answerColorQuery(slots: readonly TerminalOscColorQuerySlot[]): boolean {
-    const replies = this.colorQueries.replies(slots)
-    return (
-      replies.length > 0 &&
-      replies.findIndex((reply) => !this.delivery.answer(reply, 'owner')) !== 0
-    )
   }
 
   private releaseQueryPending(): void {
