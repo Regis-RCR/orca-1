@@ -87,6 +87,14 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
       options.onRecordAgentState(payload.agentType ?? 'unknown', payload.state)
     }
   )
+  // Why its own slot: a slot row drives no title, telemetry or rename, and the pop-out ignores it.
+  agentHookServer.setProgramStatusListener((row) => {
+    if (state.mainWindow?.isDestroyed()) {
+      return
+    }
+    state.mainWindow?.webContents.send('agentStatus:set', row)
+    getDashboardPopoutWindow()?.webContents.send('agentStatus:set', row)
+  })
   agentHookServer.setPaneStatusClearListener((clear) => {
     if (state.mainWindow?.isDestroyed()) {
       return
@@ -111,6 +119,7 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
 export function clearMainWindowAgentStatusListeners(): void {
   // Why: detach the hook listener on close so the server never fires into destroyed webContents before reopen, and replay runs only on deliberate recreations.
   agentHookServer.setListener(null)
+  agentHookServer.setProgramStatusListener(null)
   agentHookServer.setPaneStatusClearListener(null)
   setMigrationUnsupportedPtyListener(null)
   // Why timer only: it would fire into destroyed webContents, but the hook subscription has no

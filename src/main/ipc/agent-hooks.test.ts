@@ -53,6 +53,7 @@ vi.mock('../agent-hooks/server', async () => {
       transferPaneAuthority,
       canTransferPaneAuthority,
       getStatusSnapshot,
+      getProgramStatusSnapshot: () => [],
       inferInterrupt
     }
   }

@@ -22,6 +22,11 @@ import {
   removePanesAttention
 } from './workspace-attention/subject-attention-transitions'
 import { settleAttentionRemovedBy } from './workspace-attention/attention-removal-follow-up'
+import {
+  programStatusClosureLiftedPatch,
+  programStatusPanesClosedPatch,
+  programStatusPatchOrSame
+} from './program-status-pane-mirror'
 
 export function createAgentStatusAuthorityActions(
   runtime: AgentStatusRuntime
@@ -121,7 +126,8 @@ export function createAgentStatusAuthorityActions(
                 : retirementId
             ),
             agentStatusEpoch: hadLive ? s.agentStatusEpoch + 1 : s.agentStatusEpoch,
-            sortEpoch: hadLive ? s.sortEpoch + 1 : s.sortEpoch
+            sortEpoch: hadLive ? s.sortEpoch + 1 : s.sortEpoch,
+            ...programStatusPanesClosedPatch(s, retiredPaneKeys, true)
           }
         })
       )
@@ -168,6 +174,9 @@ export function createAgentStatusAuthorityActions(
         }
         return { recentlyRetiredAgentStatusPaneKeys: next }
       })
+      set((s) =>
+        programStatusPatchOrSame(s, programStatusClosureLiftedPatch(s, [paneKey, ownerPaneKey]))
+      )
       // Why: deliberately OUTSIDE the guard above, and not gated on having cleared
       // anything here. This map is not a mirror of main's — main fences panes the
       // renderer never hears about (retirePtyAgentLaunchAuthority on command-finished

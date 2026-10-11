@@ -9,6 +9,7 @@ import {
 } from '../legacy-worker-terminal-recovery-event'
 import { useAppStore } from '../../store'
 import { resolvePaneKey } from './agent-status-routing'
+import { isProgramStatusPanePayload } from '../../../../shared/program-status/program-status-pane-payload'
 import type { PendingAgentStatusEvent } from './agent-status-bridge-types'
 
 export function registerAgentStatusListeners(args: {
@@ -29,6 +30,11 @@ export function registerAgentStatusListeners(args: {
   } = args
   unsubs.push(
     window.api.agentStatus.onSet((data) => {
+      // Why first: a slot row is never a hook event, so it never reaches the applicator or its queue.
+      if (isProgramStatusPanePayload(data)) {
+        useAppStore.getState().applyProgramStatusPaneRows([data])
+        return
+      }
       enqueueLiveAgentStatus(data)
     })
   )

@@ -12,6 +12,7 @@ import { createAgentStatusOrchestrationActions } from './agent-status-orchestrat
 import { createAgentStatusProviderSessionActions } from './agent-status-provider-session-actions'
 import { createAgentStatusRecoveryActions } from './agent-status-recovery-actions'
 import { createAgentStatusRetentionActions } from './agent-status-retention-actions'
+import { createProgramStatusMirrorActions } from './program-status-pane-mirror'
 
 // Keep this path as the public contract for callers while implementation details live beside it.
 export type {
@@ -92,6 +93,7 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
   }
   return {
     ...actions,
+    ...createProgramStatusMirrorActions(runtime),
     agentStatusByPaneKey: {},
     runtimeAgentOrchestrationByPaneKey: {},
     migrationUnsupportedByPtyId: {},
@@ -102,6 +104,10 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
     agentLaunchConfigByPaneKey: {},
     retentionSuppressedPaneKeys: {},
     recentlyClosedAgentStatusTabIds: {},
-    recentlyRetiredAgentStatusPaneKeys: {}
+    recentlyRetiredAgentStatusPaneKeys: {},
+    programStatusByPaneKey: {},
+    programStatusClosedPaneKeys: {},
+    programStatusPreferred: false,
+    programStatusEpoch: 0
   }
 }

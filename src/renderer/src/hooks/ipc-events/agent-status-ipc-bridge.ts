@@ -1,4 +1,6 @@
 import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
+import { splitAgentStatusChannelRows } from '../../../../shared/program-status/program-status-pane-payload'
+import { syncProgramStatusPreferred } from '../../store/slices/program-status-pane-mirror'
 import { syncAgentHookCompletionNotificationsForStoreUpdate } from '../agent-hook-completion-notifications'
 import { registerAgentStatusListeners } from './agent-status-listeners'
 import { useAppStore } from '../../store'
@@ -137,7 +139,11 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
         if (!current.workspaceSessionReady) {
           return
         }
-        applyAgentStatusBatch(entries.map((data) => ({ data, replay: true })))
+        const { hookRows, slotRows } = splitAgentStatusChannelRows(entries)
+        if (slotRows.length > 0) {
+          current.applyProgramStatusPaneRows(slotRows)
+        }
+        applyAgentStatusBatch(hookRows.map((data) => ({ data, replay: true })))
         startupSnapshot.settle()
         const getMigrationUnsupportedSnapshot =
           window.api.agentStatus.getMigrationUnsupportedSnapshot
@@ -271,8 +277,10 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
 
   // Why: main hook server is the durable source of truth; pull the snapshot only after tabs are ready so early startup pushes can be ignored, not buffered.
   requestAgentStatusSnapshotIfReady()
+  syncProgramStatusPreferred(useAppStore.getState())
   const unsubscribeAgentStatusStore = useAppStore.subscribe((state, previousState) => {
     requestAgentStatusSnapshotIfReady()
+    syncProgramStatusPreferred(state, previousState)
     // Why: the timer covers module-owned rekeys; unrelated store writes cannot change attribution and must not rebuild its routing index.
     if (
       pendingAgentStatusEvents.length > 0 &&

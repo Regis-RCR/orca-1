@@ -134,6 +134,10 @@ export type DashboardCard = {
   /** Last accepted hook update. Optional for mixed-version snapshots; the
    *  pop-out uses it to request one refresh when a live state becomes stale. */
   statusUpdatedAt?: number
+  /** The main window composed this card from a visible program-status slot; never patch it. */
+  programStatusComposed?: true
+  /** Present only on a card the slot wins; `null` means no deadline. The pop-out never derives one. */
+  statusExpiresAt?: number | null
   /** Mirrors the sidebar's unvisited signal: the agent changed state since the
    *  user last acknowledged it (visited its tab / opened its dashboard dialog).
    *  Derived from the app-wide ack map so both surfaces mute in lockstep. */

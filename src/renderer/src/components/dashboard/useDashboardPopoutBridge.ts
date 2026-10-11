@@ -6,6 +6,7 @@ import type { RepoIcon } from '../../../../shared/repo-icon'
 import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 import { launchDashboardAgent } from './launch-dashboard-agent'
+import { isProgramStatusMirrorRecordVisible } from '../../../../shared/program-status/program-status-pane-payload'
 
 // Why: cap snapshot rebuilds during bursts of agent-status pings. The board is a
 // glanceable surface, so ~4 updates/sec is plenty and keeps the cross-worktree
@@ -37,7 +38,32 @@ export function repoIconsUnchanged(
   return nextIds.every((id) => id in previous && next[id] === previous[id])
 }
 
-type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
+type DashboardSnapshotWatchState = DashboardSnapshotState &
+  Pick<AppState, 'agentStatusEpoch'> &
+  Partial<Pick<AppState, 'programStatusPreferred' | 'programStatusEpoch'>>
+
+// Why: the pop-out never patches a card with a visible slot, so this window republishes it whole
+// when its slot, the preference, the composition epoch or that pane's hook entry changes.
+function programStatusSnapshotInputsChanged(
+  state: DashboardSnapshotWatchState,
+  previousState: DashboardSnapshotWatchState
+): boolean {
+  if (
+    state.programStatusByPaneKey !== previousState.programStatusByPaneKey ||
+    state.programStatusPreferred !== previousState.programStatusPreferred ||
+    state.programStatusEpoch !== previousState.programStatusEpoch
+  ) {
+    return true
+  }
+  if (state.agentStatusByPaneKey === previousState.agentStatusByPaneKey) {
+    return false
+  }
+  return Object.entries(state.programStatusByPaneKey ?? {}).some(
+    ([paneKey, record]) =>
+      isProgramStatusMirrorRecordVisible(record) &&
+      state.agentStatusByPaneKey[paneKey] !== previousState.agentStatusByPaneKey[paneKey]
+  )
+}
 
 export function dashboardSnapshotInputsChanged(
   state: DashboardSnapshotWatchState,
@@ -85,7 +111,8 @@ export function dashboardSnapshotInputsChanged(
       previousState.restoredRuntimeHostIdByWorkspaceSessionKey ||
     state.runtimeEnvironments !== previousState.runtimeEnvironments ||
     state.runtimeEnvironmentCatalogHydrated !== previousState.runtimeEnvironmentCatalogHydrated ||
-    state.removedRuntimeEnvironmentIds !== previousState.removedRuntimeEnvironmentIds
+    state.removedRuntimeEnvironmentIds !== previousState.removedRuntimeEnvironmentIds ||
+    programStatusSnapshotInputsChanged(state, previousState)
   )
 }
 

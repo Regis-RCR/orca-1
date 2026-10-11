@@ -1,4 +1,6 @@
-import type { ProgramStatusSlot } from './program-status-slot'
+import type { AgentStatusIpcPayload } from '../agent-status-types'
+import type { ProgramStatusAck, ProgramStatusSlot } from './program-status-slot'
+import { isProgramStatusSlotHidden } from './program-status-slot-transition'
 
 /**
  * One pane's program-status slot as the host publishes it. A distinct union member with no
@@ -55,4 +57,48 @@ export function programStatusEvictionVictim(
     oldest ??= paneKey === keep ? undefined : paneKey
   }
   return oldest
+}
+
+/** Slot rows share `agentStatus:set` and the snapshot pull with hook rows; narrow them first. */
+export function isProgramStatusPanePayload(value: unknown): value is ProgramStatusPaneIpcPayload {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'programStatusOnly' in value &&
+    value.programStatusOnly === true
+  )
+}
+
+/** What `agentStatus:set` and the snapshot pull carry since slot rows share them. */
+export type AgentStatusChannelRow = AgentStatusIpcPayload | ProgramStatusPaneIpcPayload
+
+export function splitAgentStatusChannelRows(rows: readonly AgentStatusChannelRow[]): {
+  hookRows: AgentStatusIpcPayload[]
+  slotRows: ProgramStatusPaneIpcPayload[]
+} {
+  const hookRows: AgentStatusIpcPayload[] = []
+  const slotRows: ProgramStatusPaneIpcPayload[] = []
+  for (const row of rows) {
+    if (isProgramStatusPanePayload(row)) {
+      slotRows.push(row)
+    } else {
+      hookRows.push(row)
+    }
+  }
+  return { hookRows, slotRows }
+}
+
+/** The renderer's copy of one pane's latest row; `localHide` is a dismissal not yet confirmed. */
+export type ProgramStatusMirrorRecord = {
+  revision: number
+  tabId?: string
+  worktreeId?: string
+  slot: ProgramStatusSlot | null
+  localHide?: ProgramStatusAck
+}
+
+export function isProgramStatusMirrorRecordVisible(
+  record: ProgramStatusMirrorRecord | undefined
+): record is ProgramStatusMirrorRecord & { slot: ProgramStatusSlot } {
+  return !!record?.slot && !isProgramStatusSlotHidden(record.slot, record.localHide)
 }

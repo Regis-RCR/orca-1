@@ -6,6 +6,7 @@ import {
   type DashboardSnapshot
 } from '../../../../shared/dashboard-snapshot'
 import { patchDashboardSnapshotFromAgentStatus } from './dashboard-agent-status-patch'
+import { isProgramStatusPanePayload } from '../../../../shared/program-status/program-status-pane-payload'
 
 const TOPOLOGY_REFRESH_DEBOUNCE_MS = 250
 const TOPOLOGY_REFRESH_MAX_WAIT_MS = 1_000
@@ -76,8 +77,10 @@ export function useDashboardSnapshot(): DashboardSnapshot {
       }
       let nextDeadline = Number.POSITIVE_INFINITY
       for (const card of next.cards) {
+        // Why: a card carrying an expiry is expired by the main window, never re-derived here.
         if (
           card.statusUpdatedAt !== undefined &&
+          card.statusExpiresAt === undefined &&
           (card.dotState === 'working' ||
             card.dotState === 'blocked' ||
             card.dotState === 'waiting')
@@ -130,6 +133,9 @@ export function useDashboardSnapshot(): DashboardSnapshot {
 
     const unsubscribe = window.api.dashboard.onSnapshot(apply)
     const unsubscribeStatus = window.api.agentStatus.onSet((event) => {
+      if (isProgramStatusPanePayload(event)) {
+        return
+      }
       if (
         typeof event.connectionId === 'string' &&
         event.receivedAt <= (transientClearWatermarks.get(event.connectionId) ?? -1)

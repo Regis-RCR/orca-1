@@ -7,6 +7,7 @@ import {
   clearMigrationUnsupportedPtysForPaneKey
 } from '../agent-hooks/migration-unsupported-pty-state'
 import { isValidAgentStatusDropTabId } from './agent-status-ipc-boundary'
+import { parseProgramStatusAck } from '../../shared/program-status/program-status-slot'
 
 /**
  * The renderer-initiated ways a status row goes away. All fire-and-forget
@@ -27,7 +28,7 @@ export function registerAgentStatusRowTeardownIpcHandlers(): void {
   ipcMain.removeAllListeners('agentStatus:reconcileEndedProcess')
   ipcMain.removeAllListeners('agentStatus:dropByTabPrefix')
 
-  ipcMain.on('agentStatus:drop', (_event, paneKey: unknown) => {
+  ipcMain.on('agentStatus:drop', (_event, paneKey: unknown, ack?: unknown) => {
     if (
       typeof paneKey !== 'string' ||
       (!isValidPaneKey(paneKey) && parseLegacyNumericPaneKey(paneKey) === null)
@@ -35,6 +36,14 @@ export function registerAgentStatusRowTeardownIpcHandlers(): void {
       return
     }
     try {
+      // Why first: a program-status dismissal must never reach the hook row or its caches.
+      if (ack !== undefined) {
+        const parsed = parseProgramStatusAck(ack)
+        if (parsed) {
+          agentHookServer.acknowledgeProgramStatus(paneKey, parsed)
+        }
+        return
+      }
       // Why: dropStatusEntry (not clearPaneState) is correct here — the user is
       // dismissing a status row, not tearing down a PTY. clearPaneState would also
       // wipe the per-pane prompt/tool caches, which the next hook event for that

@@ -14,6 +14,10 @@ import {
 } from './agent-status-pane-key-tab-binding'
 import { retireAgentPaneAuthorityAliasesByOwnerTab } from './agent-pane-authority'
 import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
+import {
+  programStatusPanesClosedPatch,
+  programStatusPatchOrSame
+} from './program-status-pane-mirror'
 
 function removeAcknowledgement(
   acknowledgements: Record<string, number>,
@@ -112,6 +116,10 @@ export function createAgentStatusDropActions(
       })
       if (liveExisted) {
         freshness.scheduleDeferred()
+      }
+      // Why only for a removed pane: a dismissal, interrupt or command end ends the hook row alone.
+      if (opts?.paneRemoved) {
+        set((s) => programStatusPatchOrSame(s, programStatusPanesClosedPatch(s, [paneKey], false)))
       }
       if (typeof window !== 'undefined') {
         window.api?.agentStatus?.drop?.(paneKey)

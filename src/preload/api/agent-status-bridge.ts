@@ -2,17 +2,18 @@ import { ipcRenderer } from 'electron'
 import type {
   AgentStatusCacheIdentity,
   AgentStatusClearIpcPayload,
-  AgentStatusIpcPayload,
   MigrationUnsupportedPtyEntry
 } from '../../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../../shared/agent-interrupt-intent'
 import type { AgentQuestionAnsweredInferenceRequest } from '../../shared/agent-question-answered-intent'
+import type { AgentStatusChannelRow } from '../../shared/program-status/program-status-pane-payload'
+import type { ProgramStatusAck } from '../../shared/program-status/program-status-slot'
 import type { PreloadApi } from '../api-types'
 
 export const agentStatusApi = {
   /** Listen for agent status updates forwarded from native hook receivers. */
-  onSet: (callback: (data: AgentStatusIpcPayload) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, data: AgentStatusIpcPayload) =>
+  onSet: (callback: (data: AgentStatusChannelRow) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: AgentStatusChannelRow) =>
       callback(data)
     ipcRenderer.on('agentStatus:set', listener)
     return () => ipcRenderer.removeListener('agentStatus:set', listener)
@@ -24,7 +25,7 @@ export const agentStatusApi = {
     return () => ipcRenderer.removeListener('agentStatus:clear', listener)
   },
   /** Pull cached hook statuses after renderer hydration, so startup replays aren't lost before tabs exist. */
-  getSnapshot: (): Promise<AgentStatusIpcPayload[]> =>
+  getSnapshot: (): Promise<AgentStatusChannelRow[]> =>
     ipcRenderer.invoke('agentStatus:getSnapshot'),
   inferInterrupt: (request: AgentInterruptInferenceRequest): Promise<boolean> =>
     ipcRenderer.invoke('agentStatus:inferInterrupt', request),
@@ -66,8 +67,8 @@ export const agentStatusApi = {
   getMigrationUnsupportedSnapshot: (): Promise<MigrationUnsupportedPtyEntry[]> =>
     ipcRenderer.invoke('agentStatus:getMigrationUnsupportedSnapshot'),
   /** Drop the cached hook status for a paneKey on both sides (memory + on-disk) so a relaunch can't resurrect a dismissed row. */
-  drop: (paneKey: string): void => {
-    ipcRenderer.send('agentStatus:drop', paneKey)
+  drop: (paneKey: string, ack?: ProgramStatusAck): void => {
+    ipcRenderer.send('agentStatus:drop', paneKey, ...(ack ? [ack] : []))
   },
   dropPersisted: (identity: AgentStatusCacheIdentity): void => {
     ipcRenderer.send('agentStatus:dropPersisted', identity)

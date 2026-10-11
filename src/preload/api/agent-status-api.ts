@@ -1,20 +1,21 @@
 import type {
   AgentStatusCacheIdentity,
   AgentStatusClearIpcPayload,
-  AgentStatusIpcPayload,
   MigrationUnsupportedPtyEntry
 } from '../../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../../shared/agent-interrupt-intent'
 import type { AgentQuestionAnsweredInferenceRequest } from '../../shared/agent-question-answered-intent'
 import type { ComputerAwakeStatus } from '../../shared/computer-awake-mode'
+import type { AgentStatusChannelRow } from '../../shared/program-status/program-status-pane-payload'
+import type { ProgramStatusAck } from '../../shared/program-status/program-status-slot'
 
 export type AgentStatusApi = {
   /** Listen for agent status updates forwarded from native hook receivers. */
-  onSet: (callback: (data: AgentStatusIpcPayload) => void) => () => void
+  onSet: (callback: (data: AgentStatusChannelRow) => void) => () => void
   /** Listen for main-process cleanup that evicted cached hook status. */
   onClear: (callback: (data: AgentStatusClearIpcPayload) => void) => () => void
   /** Return the current main-process hook cache after renderer hydration. */
-  getSnapshot: () => Promise<AgentStatusIpcPayload[]>
+  getSnapshot: () => Promise<AgentStatusChannelRow[]>
   inferInterrupt: (request: AgentInterruptInferenceRequest) => Promise<boolean>
   /** Guarded clear for an answered AskUserQuestion wait — the CLI emits no hook at answer time, so the renderer reports the submit keystroke. */
   inferQuestionAnswered: (request: AgentQuestionAnsweredInferenceRequest) => Promise<boolean>
@@ -32,7 +33,7 @@ export type AgentStatusApi = {
   ) => () => void
   getMigrationUnsupportedSnapshot: () => Promise<MigrationUnsupportedPtyEntry[]>
   /** Drop a paneKey from the main-process hook cache and on-disk last-status file. Fire-and-forget. */
-  drop: (paneKey: string) => void
+  drop: (paneKey: string, ack?: ProgramStatusAck) => void
   /** Evict a previously-cleared status only when its identity still matches the main-process cache. */
   dropPersisted: (identity: AgentStatusCacheIdentity) => void
   /** Same as dropPersisted for many identities in one IPC message and one listener notification. */

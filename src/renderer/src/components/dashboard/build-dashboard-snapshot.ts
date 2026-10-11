@@ -46,6 +46,7 @@ import { buildDashboardSnapshotFilterOptions } from './dashboard-snapshot-filter
 import { groupSubagentsByParentPaneKey } from './dashboard-subagent-cards'
 import { selectDashboardOrchestration } from './dashboard-orchestration-selection'
 import { dashboardRowBucketProjection, readAgentRowTurnRecords } from './dashboard-row-bucket'
+import { isProgramStatusMirrorRecordVisible } from '../../../../shared/program-status/program-status-pane-payload'
 
 /** The store slices the snapshot builder reads. Kept as a Pick so unit tests
  *  can pass a partial store without constructing the whole AppState. */
@@ -68,7 +69,13 @@ export type DashboardSnapshotState = Pick<
   Partial<
     DashboardCardTerminalInputState &
       DashboardLaunchDetectionState &
-      Pick<AppState, 'runtimeEnvironments' | 'sshTargetLabels' | 'unifiedTabsByWorktree'>
+      Pick<
+        AppState,
+        | 'runtimeEnvironments'
+        | 'sshTargetLabels'
+        | 'unifiedTabsByWorktree'
+        | 'programStatusByPaneKey'
+      >
   >
 
 /**
@@ -245,6 +252,10 @@ export function buildDashboardSnapshot(
         finishedAt,
         stateChangedAt: row.entry.stateStartedAt || row.startedAt,
         statusUpdatedAt: row.entry.updatedAt,
+        // Why: the pop-out must take this card whole from the main window, never patch it.
+        ...(isProgramStatusMirrorRecordVisible(state.programStatusByPaneKey?.[row.paneKey])
+          ? { programStatusComposed: true as const }
+          : {}),
         // `isAgentSubjectUnread`, the rule the sidebar card bolds by too.
         unseen,
         askSummary: bucket === 'attention' ? (row.entry.interactivePrompt ?? undefined) : undefined,

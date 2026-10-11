@@ -41,7 +41,9 @@ export function patchDashboardSnapshotFromAgentStatus(
     return { matched: false, snapshot }
   }
   const card = snapshot.cards[index]
+  // Why: a composed card mixes both producers, so one producer's raw event cannot patch it.
   if (
+    card.programStatusComposed === true ||
     event.receivedAt <= (card.statusUpdatedAt ?? 0) ||
     (event.worktreeId !== undefined && event.worktreeId !== card.worktreeId)
   ) {

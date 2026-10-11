@@ -9,6 +9,7 @@ import {
   removePaneKeysByTabPrefix
 } from './agent-status-pane-keyed-records'
 import { findCompletedOrphanPaneKeysForTabClose } from './agent-status-pane-key-tab-binding'
+import { programStatusTabClosedPatch } from './program-status-pane-mirror'
 
 /** Slices that only the fold touched, so the batch commits as a MERGE. */
 export function buildAgentStatusBatchPatch(
@@ -42,7 +43,10 @@ export type AgentStatusTabPrefixDropState = Pick<
   | 'sortEpoch'
   | 'tabsByWorktree'
   | 'unifiedTabsByWorktree'
->
+> &
+  Partial<
+    Pick<AppState, 'programStatusByPaneKey' | 'programStatusClosedPaneKeys' | 'programStatusEpoch'>
+  >
 
 /** Pure form of the dropAgentStatusByTabPrefix reducer: the paired snapshot
  *  apply folds the same sweep into a patch it assembles itself, so the two
@@ -203,6 +207,6 @@ export function buildAgentStatusTabPrefixDropPatch(
       sortEpoch: hadLive || migrationUnsupported.changed ? s.sortEpoch + 1 : s.sortEpoch
     }
   }
-  const patch = buildPatch()
+  const patch = { ...buildPatch(), ...programStatusTabClosedPatch(s, tabIdPrefix) }
   return { patch, hadLive }
 }

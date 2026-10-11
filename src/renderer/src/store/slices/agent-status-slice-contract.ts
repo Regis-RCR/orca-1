@@ -24,6 +24,10 @@ import type {
   MigrationUnsupportedPtyEntry
 } from '../../../../shared/agent-status-types'
 import type {
+  ProgramStatusMirrorRecord,
+  ProgramStatusPaneIpcPayload
+} from '../../../../shared/program-status/program-status-pane-payload'
+import type {
   ResumableTuiAgent,
   SleepingAgentLaunchConfig,
   SleepingAgentSessionRecord
@@ -61,6 +65,19 @@ export type AgentStatusSlice = {
 
   /** Exact pane authorities retired while sibling panes in the tab stay live. */
   recentlyRetiredAgentStatusPaneKeys: Record<string, true | string>
+
+  /** Program-status slot rows by pane key; never hook entries, so hook readers never see them. */
+  programStatusByPaneKey: Record<string, ProgramStatusMirrorRecord>
+  /** The slot's own closure record: rows for these panes are stale until a pane restore. */
+  programStatusClosedPaneKeys: Record<string, true>
+  /** The program-status preference as a primitive, so caches key on it and not on `settings`. */
+  programStatusPreferred: boolean
+  /** Advances when a pane's composed status can change through a slot. Not `agentStatusEpoch`. */
+  programStatusEpoch: number
+  applyProgramStatusPaneRows: (rows: readonly ProgramStatusPaneIpcPayload[]) => void
+  setProgramStatusPreferred: (preferred: boolean) => void
+  /** Hide this pane's visible slot and acknowledge it to main; a no-op without one. */
+  acknowledgeProgramStatusForPane: (paneKey: string) => void
 
   retireAgentPaneAuthority: (
     paneKey: string,

@@ -5,6 +5,7 @@ import type {
 } from '../../shared/agent-status-types'
 import type { AgentInterruptInferenceRequest } from '../../shared/agent-interrupt-intent'
 import type { AgentQuestionAnsweredInferenceRequest } from '../../shared/agent-question-answered-intent'
+import type { ProgramStatusPaneIpcPayload } from '../../shared/program-status/program-status-pane-payload'
 import { agentHookServer } from '../agent-hooks/server'
 import { getMigrationUnsupportedPtySnapshot } from '../agent-hooks/migration-unsupported-pty-state'
 import { registerAgentPaneAuthorityIpcHandlers } from './agent-pane-authority-ipc'
@@ -46,18 +47,22 @@ export function registerAgentHookHandlers(
         runtime?.getAgentStatusTerminalHandleForPaneKey(paneKey)
     })
   })
-  ipcMain.handle('agentStatus:getSnapshot', (): AgentStatusIpcPayload[] => {
-    // Why: the renderer pulls this after workspace hydration, so startup cannot
-    // lose replayed statuses while its local store is still empty. Match the
-    // live push enrichment in main/index.ts so parent/child rows survive replay.
-    return (
-      agentHookServer
-        .getStatusSnapshot()
-        // Same rule as the live push: the renderer's feed bridge owns structured rows for now.
-        .filter((entry) => entry.structuredHost === undefined)
-        .map((entry) => enrichAgentStatusIpcPayload(entry, runtime))
-    )
-  })
+  ipcMain.handle(
+    'agentStatus:getSnapshot',
+    (): (AgentStatusIpcPayload | ProgramStatusPaneIpcPayload)[] => {
+      // Why: the renderer pulls this after workspace hydration, so startup cannot
+      // lose replayed statuses while its local store is still empty. Match the
+      // live push enrichment in main/index.ts so parent/child rows survive replay.
+      return [
+        ...agentHookServer
+          .getStatusSnapshot()
+          // Same rule as the live push: the renderer's feed bridge owns structured rows for now.
+          .filter((entry) => entry.structuredHost === undefined)
+          .map((entry) => enrichAgentStatusIpcPayload(entry, runtime)),
+        ...agentHookServer.getProgramStatusSnapshot()
+      ]
+    }
+  )
   ipcMain.handle('agentStatus:inferInterrupt', (_event, request: unknown): boolean => {
     if (typeof request !== 'object' || request === null) {
       return false
