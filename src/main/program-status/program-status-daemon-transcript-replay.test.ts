@@ -14,32 +14,12 @@ import {
   type DaemonAdapterHarness
 } from '../daemon/daemon-pty-adapter-test-harness'
 import type { PtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
-import type * as StartupIngressModule from '../../shared/pty-startup-ingress'
 import type { ProgramStatusSummaryState } from '../../shared/program-status/program-status-slot'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { AgentHookServer } from '../agent-hooks/server'
 import { LEAF_1 } from '../agent-hooks/server.test-fixtures'
 import { createProgramStatusIngress } from './program-status-ingress'
 import { installProgramStatusIngress } from './program-status-local-ingest'
-
-// Why: the admission parser does not keep the field yet; this lets the intent reach the session
-// past it, exactly as it will once the parser keeps it.
-vi.mock('../../shared/pty-startup-ingress', async (importOriginal) => {
-  const actual = await importOriginal<typeof StartupIngressModule>()
-  return {
-    ...actual,
-    parsePtyStartupIngressIntent: (value: unknown) => {
-      const parsed = actual.parsePtyStartupIngressIntent(value)
-      const asked =
-        typeof value === 'object' && value !== null && 'programStatus' in value
-          ? value.programStatus
-          : undefined
-      const ingest =
-        typeof asked === 'object' && asked !== null && 'ingest' in asked && asked.ingest === true
-      return parsed && ingest ? { ...parsed, programStatus: { ingest: true as const } } : parsed
-    }
-  }
-})
 
 const PTY = 'pty-1'
 const PANE = makePaneKey('tab-1', LEAF_1)

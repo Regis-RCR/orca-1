@@ -47,6 +47,7 @@ import { resolveUpdateInstallMode } from '../updater'
 import { scheduleAgentLaunchRecordWarmup } from './agent-launch-record-warmup'
 import { emitServeBrowserIdentityActionLine } from '../server/serve-stdout-boundary'
 import { getBrowserIdentityModeStatus } from '../browser/browser-identity-mode-store'
+import { claimProgramStatusDesktopHost } from '../program-status/program-status-host-authority'
 
 type RuntimeService = NonNullable<typeof state.runtime>
 
@@ -265,6 +266,11 @@ export async function initializeMainProcessRuntimeLaunch(
     return
   }
   state.serveOptions = serveOptions
+  // Why here: before any window or RPC can spawn a PTY, on the desktop branch alone. OSC 7501 is
+  // armed for this app's own PTYs and its local daemon's; orcad and `--serve` never claim it.
+  if (!serveOptions) {
+    claimProgramStatusDesktopHost()
+  }
   installCloudSessionShutdownFlush()
   const runtimeRpc = installRuntimeRpc(runtime, serveOptions)
   const shellPathReady = shellPathHydration.whenReady()

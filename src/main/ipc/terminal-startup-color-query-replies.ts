@@ -4,6 +4,9 @@ import { recognizeAgentLaunchCommand } from '../../shared/agent-command-line-int
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { agentKindSchema } from '../../shared/telemetry-events'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
+import type { ProgramStatusIntent } from '../../shared/program-status-intent'
+import type { PtySpawnOptions } from '../providers/pty-provider-contract'
+import { hostProgramStatusIntent } from '../program-status/program-status-spawn-intent'
 
 function isAgentLaunch(args: {
   launchAgent?: unknown
@@ -52,6 +55,7 @@ export function getStartupTerminalIngressIntent(args: {
   launchConfig?: SleepingAgentLaunchConfig
   terminalColorQueryReplies?: unknown
   terminalKittyKeyboardProtocol?: boolean
+  programStatus?: ProgramStatusIntent
 }) {
   // Why colours for every PTY: an agent typed into a plain shell later queries too, and these
   // seed an owner that has not been pushed the host's viewer colours yet.
@@ -61,6 +65,26 @@ export function getStartupTerminalIngressIntent(args: {
   return parsePtyStartupIngressIntent({
     kittyKeyboardProtocol: args.terminalKittyKeyboardProtocol === true && isAgentLaunch(args),
     colors,
-    deadlineMs: 5_000
+    deadlineMs: 5_000,
+    programStatus: args.programStatus
   })
+}
+
+/** Both spawn sites: the startup intent, and OSC 7501 ingestion where this host supports it. */
+export function applyStartupTerminalIngress(
+  spawnOptions: Pick<PtySpawnOptions, 'startupIngress' | 'programStatusIngest'>,
+  args: Parameters<typeof getStartupTerminalIngressIntent>[0] & { connectionId?: string | null },
+  isDaemonHostSpawn: boolean
+): void {
+  const startupIngress = getStartupTerminalIngressIntent({
+    ...args,
+    programStatus: hostProgramStatusIntent({ connectionId: args.connectionId, isDaemonHostSpawn })
+  })
+  if (startupIngress) {
+    spawnOptions.startupIngress = startupIngress
+  }
+  // Why both: a daemon arms from the intent, a local PTY from the spawn option.
+  if (startupIngress?.programStatus) {
+    spawnOptions.programStatusIngest = true
+  }
 }

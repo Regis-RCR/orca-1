@@ -131,6 +131,8 @@ const { registerServeSignalHandlers } = await import('./serve-signal-handlers')
 const { installServeNativeQuitGuard } = await import('./serve-native-quit-guard')
 const { quitProcess } = await import('./process-quit-request')
 const { quitFromUserCommand } = await import('./main-window-actions')
+const { isProgramStatusDesktopHost, resetProgramStatusDesktopHostForTests } =
+  await import('../program-status/program-status-host-authority')
 
 type FakeWindow = {
   id: number
@@ -193,6 +195,7 @@ describe('desktop startup activation', () => {
     startupSettled.mockClear()
     launchHooks.duringInstallDirRepair = () => {}
     launchHooks.failBeforeWindow = false
+    resetProgramStatusDesktopHostForTests()
     state.mainWindow = null
     state.isServeMode = false
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch only null-checks the runtime and marks its launch-record warm-up before the mocked RPC server takes it.
@@ -284,6 +287,16 @@ describe('desktop startup activation', () => {
     expect(state.desktopActivationGate).toBeNull()
   })
 
+  it('claims the OSC 7501 desktop host authority for a desktop launch', async () => {
+    expect(isProgramStatusDesktopHost()).toBe(false)
+    await initializeMainProcessReady({
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch only calls once() on the returned window.
+      openMainWindow: () => openMainWindow() as unknown as NonNullable<typeof state.mainWindow>,
+      handleMacAppActivation: vi.fn()
+    })
+    expect(isProgramStatusDesktopHost()).toBe(true)
+  })
+
   it('loads SSH targets on a windowless serve before paired clients can connect (#25886)', async () => {
     launchOrder.length = 0
     state.isServeMode = true
@@ -310,6 +323,8 @@ describe('desktop startup activation', () => {
 
     expect(windows).toHaveLength(0)
     expect(launchOrder).toEqual(['ssh-registered', 'rpc-start'])
+    // A serve host never claims the desktop authority, so its PTYs stay out of OSC 7501.
+    expect(isProgramStatusDesktopHost()).toBe(false)
     // Signals mark their quit, so the macOS native-quit guard lets them through (#15537).
     expect(registerServeSignalHandlers).toHaveBeenCalledWith(process, quitProcess)
     expect(installServeNativeQuitGuard).toHaveBeenCalledWith(

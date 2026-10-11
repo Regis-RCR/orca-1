@@ -21,7 +21,7 @@ import {
 } from '../pane/spawn-reservation'
 import { ptySizes } from '../delivery/visibility-state'
 import { shouldSeedPreAttachPtySize } from '../delivery/attached-pty-size'
-import { getStartupTerminalIngressIntent } from '../../terminal-startup-color-query-replies'
+import { applyStartupTerminalIngress } from '../../terminal-startup-color-query-replies'
 import { resolveConfiguredTerminalShellArgs } from '../configured-terminal-shell-args'
 import { withCodexTerminalServerIsolationEnv } from '../../../../shared/codex-terminal-server-isolation'
 import { planCodexNoDaemonLaunch } from '../../../pty/codex-no-daemon-launch-command'
@@ -180,10 +180,7 @@ export async function buildPtyIpcSpawnOptions(
       ? (ctx.deps.getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto')
       : undefined
   }
-  const startupIngress = getStartupTerminalIngressIntent(args)
-  if (startupIngress) {
-    ctx.spawnOptions.startupIngress = startupIngress
-  }
+  applyStartupTerminalIngress(ctx.spawnOptions, args, ctx.isDaemonHostSpawn)
   const resolvedPaneSpawnReservationKey = makePaneSpawnReservationKey(
     args.worktreeId,
     args.connectionId,

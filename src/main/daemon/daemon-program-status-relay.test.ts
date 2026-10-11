@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
 import { parseProgramStatusFact } from '../../shared/program-status/program-status-slot'
-import type * as StartupIngressModule from '../../shared/pty-startup-ingress'
 import { DaemonServer } from './daemon-server'
 import type { ConnectedDaemonClient } from './daemon-client-connections'
 import type { DaemonStreamDataBatcher } from './daemon-stream-data-batcher'
@@ -18,25 +17,6 @@ import {
   type DaemonProgramStatusOutlet
 } from './daemon-program-status-relay'
 import type { DaemonEvent, DaemonProgramStatusFact, DaemonRequest } from './types'
-
-// Why: the admission parser does not keep the field yet; this lets the intent reach the session
-// past it, exactly as it will once the parser keeps it.
-vi.mock('../../shared/pty-startup-ingress', async (importOriginal) => {
-  const actual = await importOriginal<typeof StartupIngressModule>()
-  return {
-    ...actual,
-    parsePtyStartupIngressIntent: (value: unknown) => {
-      const parsed = actual.parsePtyStartupIngressIntent(value)
-      const asked =
-        typeof value === 'object' && value !== null && 'programStatus' in value
-          ? value.programStatus
-          : undefined
-      const ingest =
-        typeof asked === 'object' && asked !== null && 'ingest' in asked && asked.ingest === true
-      return parsed && ingest ? { ...parsed, programStatus: { ingest: true as const } } : parsed
-    }
-  }
-})
 
 const report = (body: string): string => `\x1b]7501;${body}\x07`
 const ARMED: PtyStartupIngressIntent = {

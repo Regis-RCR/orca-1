@@ -25,7 +25,7 @@ import { resolveConfiguredTerminalShellArgs } from '../configured-terminal-shell
 import { withCodexTerminalServerIsolationEnv } from '../../../../shared/codex-terminal-server-isolation'
 import { planCodexNoDaemonLaunch } from '../../../pty/codex-no-daemon-launch-command'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
-import { getStartupTerminalIngressIntent } from '../../terminal-startup-color-query-replies'
+import { applyStartupTerminalIngress } from '../../terminal-startup-color-query-replies'
 import {
   joinPaneSpawn,
   makePaneSpawnReservationKey,
@@ -58,10 +58,7 @@ export async function buildRuntimePtySpawnOptions(
   if (!args.connectionId && !ctx.isDaemonHostSpawn) {
     ctx.spawnOptions.codexHomePathOverride = { value: ctx.selectedCodexHomePath }
   }
-  const startupIngress = getStartupTerminalIngressIntent(args)
-  if (startupIngress) {
-    ctx.spawnOptions.startupIngress = startupIngress
-  }
+  applyStartupTerminalIngress(ctx.spawnOptions, args, ctx.isDaemonHostSpawn)
   let ptySpawnCommitReported = false
   ctx.reportPtySpawnCommitted = (): void => {
     if (ptySpawnCommitReported) {

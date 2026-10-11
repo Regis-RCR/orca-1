@@ -8,7 +8,11 @@ import {
   type SnapshotCheckpointResult
 } from './daemon-pty-runtime-state'
 import { isDaemonGoneError } from './daemon-endpoint-errors'
-import { HISTORY_SEED_TRANSFER_PROTOCOL_VERSION } from './daemon-protocol-version'
+import {
+  HISTORY_SEED_TRANSFER_PROTOCOL_VERSION,
+  supportsProgramStatusFacts
+} from './daemon-protocol-version'
+import { withoutProgramStatusIntent } from '../../shared/program-status-intent'
 import type { ColdRestoreInfo } from './history-reader'
 import { NdjsonLineTooLongError } from './ndjson'
 import {
@@ -136,7 +140,11 @@ export abstract class DaemonPtySpawnRequest extends DaemonPtyRuntimeState {
         ...(historySeed ? { historySeed } : {}),
         ...(historySeedTransferId ? { historySeedTransferId } : {}),
         ...(this.supportsStartupIngress && !context.attachOnly && opts.startupIngress
-          ? { startupIngress: opts.startupIngress }
+          ? {
+              startupIngress: supportsProgramStatusFacts(this.protocolVersion)
+                ? opts.startupIngress
+                : withoutProgramStatusIntent(opts.startupIngress)
+            }
           : {}),
         ...(!context.attachOnly && opts.spawnIntent
           ? { spawnIntent: forwardedSpawnIntent(opts.spawnIntent, opts.agentSessionEnsure) }

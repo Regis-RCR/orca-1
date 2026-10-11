@@ -229,13 +229,13 @@ describe('OSC 7501 across daemon protocol versions', () => {
     downgraded.disconnect()
   })
 
-  it('keeps the field off the wire in this commit, so a v50 daemon never arms (dormant)', async () => {
-    expect(parsePtyStartupIngressIntent(ARMED)).not.toHaveProperty('programStatus')
+  it('arms a v50 session over the real wire, so a program that never probes is ingested', async () => {
+    expect(parsePtyStartupIngressIntent(ARMED)).toEqual(ARMED)
     const directory = tempDirectory()
     const current = await startServer(directory, 50)
     const heard = installRecordingIngress()
     const spawned = await current.adapter().spawn({
-      sessionId: 'pty-dormant',
+      sessionId: 'pty-live',
       cols: 80,
       rows: 24,
       startupIngress: ARMED
@@ -244,6 +244,33 @@ describe('OSC 7501 across daemon protocol versions', () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(spawned).not.toHaveProperty('programStatus')
-    expect(heard).toEqual([])
+    expect(heard).toContain(`register:${spawned.id}`)
+    expect(heard).toContain(`fact:${spawned.id}`)
+  })
+
+  it.each([
+    [49, false],
+    [50, true]
+  ])('sends the request to a v%i daemon only from 50 (%s)', async (version, kept) => {
+    vi.spyOn(DaemonClient.prototype, 'ensureConnected').mockResolvedValue()
+    const request = vi
+      .spyOn(DaemonClient.prototype, 'request')
+      .mockResolvedValue({ isNew: true, pid: null, shellState: 'unsupported', snapshot: null })
+    const directory = tempDirectory()
+    const { adapter } = await startServer(directory, 50)
+    await adapter(version).spawn({
+      sessionId: 'pty-gated',
+      cols: 80,
+      rows: 24,
+      startupIngress: ARMED
+    })
+    const payload: unknown = request.mock.calls.find(([type]) => type === 'createOrAttach')?.[1]
+    const wire =
+      typeof payload === 'object' && payload !== null && 'startupIngress' in payload
+        ? payload.startupIngress
+        : undefined
+    const sent = parsePtyStartupIngressIntent(wire)
+    expect(sent).toEqual(kept ? ARMED : { colors: ARMED.colors, deadlineMs: 1_000 })
+    expect(typeof wire === 'object' && wire !== null && 'programStatus' in wire).toBe(kept)
   })
 })
