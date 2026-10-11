@@ -65,6 +65,72 @@ describe('pty transcript secret scan', () => {
   })
 })
 
+describe('OSC 7501 report text fields', () => {
+  const ESC = String.fromCharCode(0x1b)
+  const BEL = String.fromCharCode(0x07)
+  const report = (body) => `${ESC}]7501;${body}${BEL}`
+  const encode = (text) => Buffer.from(text, 'utf8').toString('base64')
+  const LONG_RUN = /[A-Za-z0-9_-]{40,}/
+
+  it('passes msg and title values whose decoded text is clean, however long the encoding', () => {
+    const msg = encode('answer: Which colour do you prefer for the agent panel today?')
+    const title = encode('agent task title that is long enough to encode past forty')
+    expect(msg).toMatch(LONG_RUN)
+    expect(title).toMatch(LONG_RUN)
+    const text = `> ${report(`state=blocked:kind=question:msg=${msg}:title=${title}`)}\n`
+    expect(scanTranscriptForSecrets(text)).toEqual([])
+  })
+
+  it.each([
+    ['msg', 'an email', 'reach me at jin.woo@acme.dev about the agent run', 'encoded-email'],
+    [
+      'title',
+      'a bearer token',
+      'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345',
+      'encoded-bearer-token'
+    ],
+    [
+      'msg',
+      'a vendor key',
+      'use sk-abcdefghijklmnopqrstuvwxyz0123 for the agent',
+      'encoded-vendor-key'
+    ]
+  ])(
+    'flags a %s whose decoded text carries %s, at the encoded span',
+    (key, _what, decoded, kind) => {
+      const value = encode(decoded)
+      const text = `line one\n${report(`state=done:${key}=${value}`)}`
+      const findings = scanTranscriptForSecrets(text)
+      expect(findings).toEqual([
+        { kind, index: text.indexOf(value), match: value, line: 2, column: text.indexOf(value) - 8 }
+      ])
+      const { text: redacted } = redactTranscript(text)
+      expect(redacted).toHaveLength(text.length)
+      expect(scanTranscriptForSecrets(redacted)).toEqual([])
+    }
+  )
+
+  it('still flags a long opaque token outside any 7501 text field', () => {
+    const token = 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9T0u1'
+    const text = `${report(`state=done:msg=${encode('all clear for the agent here')}`)} ${token}`
+    expect(scanTranscriptForSecrets(text)).toMatchObject([
+      { kind: 'opaque-token', match: token, index: text.indexOf(token) }
+    ])
+  })
+
+  it.each([
+    ['a non-canonical length', `${'Zm9vYmFy'.repeat(5)}Z`],
+    [
+      'bytes that are not UTF-8',
+      Buffer.from(Array.from({ length: 45 }, (_, i) => 0x80 + (i % 60))).toString('base64')
+    ]
+  ])('falls back to the opaque-token rule for a msg with %s', (_name, value) => {
+    expect(value).toMatch(LONG_RUN)
+    const text = report(`state=done:msg=${value}`)
+    expect(scanTranscriptForSecrets(text).map((finding) => finding.kind)).toEqual(['opaque-token'])
+  })
+})
+
 describe('redaction', () => {
   it('replaces every finding with the same number of characters', () => {
     // Why length matters: the fixture's value is its exact wrapping. A shorter

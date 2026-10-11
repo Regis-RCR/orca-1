@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-10-11T17:09:47.865Z",
+  "platform": "darwin",
+  "command": [
+    "claude",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "default",
+    "--setting-sources",
+    "project",
+    "--strict-mcp-config",
+    "--mcp-config",
+    "{\"mcpServers\":{}}"
+  ],
+  "cols": 120,
+  "rows": 40,
+  "note": "Claude Code 2.1.295 (claude-haiku-4-5-20251001), macOS, branch contrib/osc7501-program-status at 12055e4b4c9491469a4aa819242d13dad02120ec. Capture route: repository capture script hosted by a probe-answering test terminal; Orca's own reply ordering is proven by the end-to-end startup batch tests. The host answers ESC ] 7501 ; ? with ESC ] 7501 ; ? ST ahead of DA1, and XTVERSION, kitty, DA1 and DECRQM as xterm.js 6.1.0-beta.303; env TERM_PROGRAM=Orca, COLORTERM=truecolor, FORCE_HYPERLINK=1, CLAUDE_CODE_DISABLE_CLAUDE_MDS=1, CLAUDE_CODE_DISABLE_AUTO_MEMORY=1, DISABLE_AUTOUPDATER=1, no ORCA_*; working directory pre-trusted. Scenario turn: prompt 'say hi', working then done, stopped with Ctrl-] about 3 s after done. Driven interactively through the host terminal. Scrubbed same length before commit: the claude.ai session link id, the home path prefix, the working directory path, the plan tier and the usage-limit notice, and in subagent the resume UUID (placeholder UUID). Not trimmed. The scanner's remaining opaque-token hits are the base64 msg values of the reports and this note's commit SHA.",
+  "exitCode": 129
+}

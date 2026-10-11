@@ -42,6 +42,19 @@ function literalPattern(value) {
 export function scanTranscriptForSecrets(text) {
   const claimed = []
   const findings = []
+  for (const field of encodedReportTextFields(text)) {
+    const decoded = decodeBase64Utf8(field.value)
+    if (decoded === null) {
+      // Not valid base64 text, so the ordinary rules below judge the raw value.
+      continue
+    }
+    claimed.push([field.index, field.index + field.value.length])
+    const [first] = scanTranscriptForSecrets(decoded)
+    if (first) {
+      const at = { index: field.index, match: field.value, ...locate(text, field.index) }
+      findings.push({ kind: `encoded-${first.kind}`, ...at })
+    }
+  }
   for (const { kind, re } of buildPatterns()) {
     re.lastIndex = 0
     let match = re.exec(text)
@@ -58,6 +71,58 @@ export function scanTranscriptForSecrets(text) {
     }
   }
   return findings.sort((left, right) => left.index - right.index)
+}
+
+// OSC 7501 reports carry the agent's own text base64-encoded in `msg=` and `title=`. An encoding is
+// not a token, so its decoded text is what gets scanned; a finding names the encoded span.
+const REPORT_PREFIX = `${String.fromCharCode(0x1b)}]7501;`
+const ENCODED_TEXT_KEYS = new Set(['msg', 'title'])
+
+/** @returns {{index: number, value: string}[]} */
+function encodedReportTextFields(text) {
+  const fields = []
+  let at = text.indexOf(REPORT_PREFIX)
+  while (at !== -1) {
+    const bodyStart = at + REPORT_PREFIX.length
+    let end = bodyStart
+    // BEL or ESC ends the frame; ESC covers both ST and an unterminated frame.
+    while (end < text.length && text.charCodeAt(end) !== 0x07 && text.charCodeAt(end) !== 0x1b) {
+      end += 1
+    }
+    let pairStart = bodyStart
+    for (const pair of text.slice(bodyStart, end).split(':')) {
+      const equals = pair.indexOf('=')
+      const value = equals === -1 ? '' : pair.slice(equals + 1).trim()
+      if (value && ENCODED_TEXT_KEYS.has(pair.slice(0, equals).trim())) {
+        fields.push({
+          index: pairStart + equals + 1 + pair.slice(equals + 1).indexOf(value),
+          value
+        })
+      }
+      pairStart += pair.length + 1
+    }
+    at = text.indexOf(REPORT_PREFIX, end)
+  }
+  return fields
+}
+
+/** Strict, as the report parser decodes: canonical base64 of valid UTF-8, else null. */
+function decodeBase64Utf8(value) {
+  let binary
+  try {
+    binary = atob(value)
+  } catch {
+    return null
+  }
+  if (btoa(binary).replace(/=+$/, '') !== value.replace(/=+$/, '')) {
+    return null
+  }
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
+  } catch {
+    return null
+  }
 }
 
 // Why: a scrubbed fixture must verify clean, so this scanner has to recognise its own

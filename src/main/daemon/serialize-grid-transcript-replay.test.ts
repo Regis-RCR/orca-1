@@ -128,7 +128,14 @@ const KNOWN_PREEXISTING_I2_FAILURES: Record<string, number> = {
   'omp-18-setup': 6,
   // STA-10739 ConPTY capture, serializer untouched: a cursor wrap-pending at column 120 (ConPTY
   // pads the row to the edge) restores at column 119 on the unresized schedule.
-  'pwsh-7-6-psreadline-history-prediction-conpty': 2
+  'pwsh-7-6-psreadline-history-prediction-conpty': 2,
+  // The 2.1.295 program-status captures, serializer untouched: the live pen's true-colour background
+  // left on restored cells, and the subagent run's cursor one column short after a shrink.
+  'claude-program-status-2-1-295-interrupt': 2,
+  'claude-program-status-2-1-295-question': 2,
+  'claude-program-status-2-1-295-startup': 6,
+  'claude-program-status-2-1-295-subagent': 2,
+  'claude-program-status-2-1-295-turn': 2
 }
 
 // Exact resize checkpoints and full GridDiff hashes from base 6835b9b4e3ea, not this branch.
