@@ -10,7 +10,7 @@ import type { JobTerminationOutcome } from '../windows/windows-pty-job'
 import type { SessionOptions } from './session-options'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { randomUUID } from 'node:crypto'
-import { PtyStartupIngress } from '../../shared/pty-startup-ingress'
+import { SessionStartupIngress } from './session-startup-ingress'
 
 import type {
   SessionState,
@@ -38,7 +38,7 @@ export class Session {
   private readonly shellReady: SessionShellReadyBarrier
   private readonly termination: SessionTerminationController
   /** Public so the creating host can print its own notice as terminal output. */
-  readonly startupIngress: PtyStartupIngress
+  readonly startupIngress: SessionStartupIngress
   private readonly recoveryBarrier: TerminalShellRecoveryBarrier
 
   constructor(opts: SessionOptions) {
@@ -81,12 +81,7 @@ export class Session {
       acceptStartupIngress: (data) => this.startupIngress.accept(data)
     })
 
-    this.startupIngress = new PtyStartupIngress({
-      ...(opts.startupIngress ? { intent: opts.startupIngress } : {}),
-      ...(opts.ownerBackend ? { ownerBackend: opts.ownerBackend } : {}),
-      write: (data) => this.subprocess.write(data),
-      onEmission: (emission) => this.recoveryBarrier.accept(emission)
-    })
+    this.startupIngress = new SessionStartupIngress(opts, this.recoveryBarrier)
     this.shellReady.startPromptReadinessProbe()
     this.subprocess.onData((data) => {
       if (!this._disposed) {
@@ -280,10 +275,7 @@ export class Session {
 
   prepareForFinalSnapshot(): string {
     const held = this.shellReady.releaseHeldBytes()
-    this.startupIngress.snapshotBarrier()
-    // Why last: snapshotBarrier can emit held spans into the barrier, and a
-    // teardown checkpoint mid-episode must not lose the barrier's queued bytes.
-    this.recoveryBarrier.flushPending()
+    this.startupIngress.flushThroughSnapshotBarrier()
     return held
   }
 
@@ -296,11 +288,9 @@ export class Session {
     // "dispose while kill() in flight" case and the invariant needs the pre-flip `_state`; do NOT move it down.
     this.shellReady.releaseDeviceAttributes()
     this.shellReady.releaseHeldBytes()
+    // Why before clearClients below: the drain delivers the barrier's queued bytes
+    // while clients are attached and the emulator accepts writes.
     this.startupIngress.drainAndClose()
-    // Why after drainAndClose (and before clearClients below): a dispose
-    // mid-episode must deliver the barrier's queued bytes — drained ingress
-    // included — while clients are attached and the emulator accepts writes.
-    this.recoveryBarrier.flushPending()
     const wasTerminating = this.termination.isTerminating && this._state !== 'exited'
     const clientsToNotify = wasTerminating ? this.output.snapshotClients() : []
     if (wasTerminating) {
@@ -367,12 +357,9 @@ export class Session {
     this.shellReady.releaseDeviceAttributes()
     this.shellReady.disposePromptReadinessProbe()
     this.shellReady.releaseHeldBytes()
+    // Why before broadcastExit below: a shell exiting mid-proof must not strand the
+    // queued post-133;D prompt; those bytes belong to clients, records, and history.
     this.startupIngress.drainAndClose()
-    // Why after drainAndClose: drained ingress bytes re-enter the barrier and can
-    // open a fresh episode; flushing here delivers them too. A shell exiting
-    // mid-proof must not strand the queued post-133;D prompt — those bytes belong
-    // to clients, records, and history before broadcastExit below.
-    this.recoveryBarrier.flushPending()
     this._exitCode = code
     this._state = 'exited'
     this.termination.clearTerminating()
