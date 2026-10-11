@@ -24,11 +24,13 @@ function slotOf(
   identity: ProgramStatusIdentity,
   reportSeq: number,
   write: ProgramStatusWrite,
-  shown: ProgramStatusView | null
+  shown: ProgramStatusView | null,
+  kept?: ProgramStatusView
 ): ProgramStatusWriteResult {
   if (shown === null) {
     return { accepted: true, next: undefined }
   }
+  const exitedFrom = write.liveness === 'exited' ? (write.prevNow ?? kept) : undefined
   return {
     accepted: true,
     next: {
@@ -40,7 +42,8 @@ function slotOf(
       // ledger's instant, or every restore would restart the 30 minute window.
       livenessChangedAt: write.livenessChangedAt,
       view: programStatusViewNameForLiveness(write.liveness),
-      shown
+      shown,
+      ...(exitedFrom ? { exitedFrom } : {})
     }
   }
 }
@@ -59,7 +62,8 @@ function applyReport(
       return { accepted: false, next: prev }
     }
   }
-  return slotOf(write.identity, write.reportSeq, write, write.shown)
+  const kept = prev && sameIdentity(prev, write.identity) ? prev.exitedFrom : undefined
+  return slotOf(write.identity, write.reportSeq, write, write.shown, kept)
 }
 
 function applyLifecycle(
@@ -74,7 +78,8 @@ function applyLifecycle(
     return { accepted: false, next: prev }
   }
   const shown = write.shown === undefined ? prev.shown : write.shown
-  return slotOf(prev, prev.reportSeq, write, shown)
+  // Why kept: a later lifecycle without a proof does not erase the one the exit brought.
+  return slotOf(prev, prev.reportSeq, write, shown, prev.exitedFrom)
 }
 
 /** The pure acceptance rule of one pane's slot; it reads no clock. */

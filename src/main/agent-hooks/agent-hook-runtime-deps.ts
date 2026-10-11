@@ -48,8 +48,10 @@ export function agentHookRuntimeDeps(
         server.forgetAgentExit(paneKey)
       }
     },
-    dropAgentStatusForRemovedWorktree: (worktreeId, host) =>
-      server.dropStatusEntriesForRemovedWorktree(worktreeId, host),
+    dropAgentStatusForRemovedWorktree: (worktreeId, host) => {
+      server.dropStatusEntriesForRemovedWorktree(worktreeId, host)
+      server.forgetProgramStatusForRemovedWorktree(worktreeId, host)
+    },
     buildAgentHookPtyEnv: () =>
       isAgentStatusHooksEnabled(getSettings()) ? server.buildPtyEnv() : {}
   } satisfies RuntimeDeps

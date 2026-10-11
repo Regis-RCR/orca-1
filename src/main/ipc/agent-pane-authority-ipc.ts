@@ -21,6 +21,7 @@ export function registerAgentPaneAuthorityIpcHandlers(
     }
     try {
       agentHookServer.restorePaneAuthority(paneKey)
+      agentHookServer.reopenProgramStatusPane(paneKey)
     } catch (err) {
       console.warn('[agent-hooks] restorePaneAuthority failed:', err)
     }
@@ -40,6 +41,7 @@ export function registerAgentPaneAuthorityIpcHandlers(
         }
         agentHookServer.retirePaneAuthority(paneKey, retirementId)
         clearMigrationUnsupportedPtysForPaneKey(paneKey)
+        agentHookServer.closeProgramStatusPane(paneKey)
       } catch (err) {
         console.warn('[agent-hooks] retirePaneAuthority failed:', err)
       }

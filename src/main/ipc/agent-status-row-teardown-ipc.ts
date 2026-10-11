@@ -102,6 +102,7 @@ export function registerAgentStatusRowTeardownIpcHandlers(): void {
     try {
       agentHookServer.dropStatusEntriesByTabPrefix(tabId)
       clearMigrationUnsupportedPtysByTabPrefix(tabId)
+      agentHookServer.closeProgramStatusTab(tabId)
     } catch (err) {
       console.warn('[agent-hooks] dropStatusEntriesByTabPrefix failed:', err)
     }

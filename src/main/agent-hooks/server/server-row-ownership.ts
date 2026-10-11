@@ -8,7 +8,7 @@ import type {
   StatusRowMutationListener
 } from './server-types'
 import { toAgentStatusIpcPayload } from './server-status-identity'
-import { AgentHookServerListeners } from './server-listeners'
+import { AgentHookServerProgramStatus } from './server-program-status'
 
 function toMutationIdentity(
   row: EnrichedAgentHookEventPayload | null | undefined
@@ -50,7 +50,7 @@ function semanticRowsEqual(
   return structuralValuesEqualIgnoringUndefined(semanticRow(before), semanticRow(after))
 }
 
-export abstract class AgentHookServerRowOwnership extends AgentHookServerListeners {
+export abstract class AgentHookServerRowOwnership extends AgentHookServerProgramStatus {
   _resetRowOwnershipForTests(): void {
     this.paneKeyByTerminalHandle.clear()
   }

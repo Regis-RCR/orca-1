@@ -25,6 +25,8 @@ export type ProgramStatusSlot = ProgramStatusIdentity & {
   view: ProgramStatusViewName
   /** The selected view; an empty view removes the slot instead. */
   shown: ProgramStatusView
+  /** Exited only: the producer's `now` view the exit followed, its proof for carrying a dismissal. */
+  exitedFrom?: ProgramStatusView
 }
 
 /** A user's dismissal, keyed by PTY; it hides exactly this incarnation, view and generation. */
@@ -42,6 +44,8 @@ export type ProgramStatusReportWrite = {
   shown: ProgramStatusView | null
   liveness: ProgramStatusLiveness
   livenessChangedAt: number
+  /** Exited only: the producer's `now` view the exit followed. */
+  prevNow?: ProgramStatusView | null
 }
 
 /** `shown` omitted keeps the view; `prevNow` rides only on the exit write, for the ack carry. */
