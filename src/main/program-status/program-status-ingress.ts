@@ -204,6 +204,14 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
     }
   }
 
+  /** Re-runs the lazy attribution and publishes a registered ledger once it has a pane. */
+  const settle = (entry: Attribution): void => {
+    if (entry.ledger.incarnationId !== null) {
+      attribute(entry)
+      writeReport(entry)
+    }
+  }
+
   const entryOf = (ptyId: string): Attribution => {
     const entry = entries.get(ptyId) ?? {
       ledger: createProgramStatusLedger(ptyId, deps.now()),
@@ -229,9 +237,8 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
     /** Re-runs the lazy attribution; publishes a ledger that had no pane yet. */
     settle(ptyId: string): void {
       const entry = entries.get(ptyId)
-      if (entry && entry.ledger.incarnationId !== null) {
-        attribute(entry)
-        writeReport(entry)
+      if (entry) {
+        settle(entry)
       }
     },
     exited: (ptyId: string): void => step(ptyId, exitProgramStatusLedger),
@@ -275,6 +282,13 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
         if (request?.bindsPane(request.paneKey, request.ptyId)) {
           parked.delete(key)
           resync(request)
+        }
+      }
+      // Why: a report taken before the runtime recorded the PTY's pane has no target, and a
+      // silent program sends no later report to re-run the attribution.
+      for (const entry of entries.values()) {
+        if (!entry.target) {
+          settle(entry)
         }
       }
     }

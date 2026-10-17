@@ -7,6 +7,12 @@ import { mapExplicitAgentStateToRuntimeTerminalStatus } from './runtime-worktree
 import { WORKTREE_CATALOG_METHODS } from './rpc/methods/worktree-catalog-methods'
 import { WorktreePsParams } from '../../shared/rpc-contract/worktree-params'
 import { PROGRAM_STATUS_ENTRY_TABLE } from '../../shared/program-status/program-status-entry-table.test-support'
+import { createProgramStatusIngress } from '../program-status/program-status-ingress'
+import {
+  installedProgramStatusIngress,
+  installProgramStatusIngress
+} from '../program-status/program-status-local-ingest'
+import { paneKeyPtyId, ptyPaneKey, rememberPaneKeyForPty } from '../ipc/pty/pane/key-state'
 import type {
   ProgramStatusLiveness,
   ProgramStatusReportWrite,
@@ -191,6 +197,52 @@ describe('worktree ps composes program status only when asked', () => {
     })
     const [agent] = (await agentsOf(runtime, true))?.agents ?? []
     expect(agent && mapExplicitAgentStateToRuntimeTerminalStatus(agent.state)).toBe('idle')
+  })
+})
+
+describe('a runtime-owned pane whose program reported before the spawn commit', () => {
+  afterEach(() => {
+    installProgramStatusIngress(null)
+    ptyPaneKey.clear()
+    paneKeyPtyId.clear()
+  })
+
+  it('reaches the store and worktree ps once the commit binds the pane, with no later report', async () => {
+    // No renderer leaf shows this PTY: its pane comes from the runtime's record alone.
+    const statusWiring = makeAgentStatusStoreWiring()
+    const statusStore = statusWiring.statusStore
+    const runtime = new OrcaRuntimeService(store, undefined, {
+      ...statusWiring.deps,
+      getProgramStatusSnapshot: () => statusStore.getProgramStatusSnapshot()
+    })
+    installProgramStatusIngress(
+      createProgramStatusIngress({
+        sink: {
+          report: (target, write) => statusStore.ingestProgramStatusReport({ ...target, write }),
+          lifecycle: (paneKey, write) => statusStore.applyProgramStatusLifecycle(paneKey, write),
+          rekey: (from, to, identity, current) =>
+            statusStore.rekeyProgramStatus(from, to, identity, current),
+          forget: (paneKey, identity, options) =>
+            statusStore.forgetProgramStatus(paneKey, identity, options)
+        },
+        resolveTarget: (ptyId) => runtime.resolveProgramStatusPaneTarget(ptyId),
+        resolvePaneKey: (paneKey) => statusStore.resolveProgramStatusPaneKey(paneKey),
+        now: () => NOW
+      })
+    )
+    installedProgramStatusIngress()!.local.begin('ps-pty', 'inc-ps')
+    runtime.onPtyData('ps-pty', '\x1b]7501;state=working\x07', 1)
+    expect(statusStore.getProgramStatusSnapshot()).toEqual([])
+    // The spawn commit: the runtime records the pane, then main's maps name the pair.
+    runtime.registerPty('ps-pty', TEST_WORKTREE_ID, null, { tabId: 'tab-ps', leafId: LEAF_ID })
+    rememberPaneKeyForPty('ps-pty', PANE_KEY)
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    expect(statusStore.getProgramStatusSnapshot()).toEqual([
+      expect.objectContaining({ paneKey: PANE_KEY, programStatus: expect.anything() })
+    ])
+    expect((await agentsOf(runtime, true))?.agents).toEqual([
+      expect.objectContaining({ paneKey: PANE_KEY, state: 'working', agentType: null })
+    ])
   })
 })
 

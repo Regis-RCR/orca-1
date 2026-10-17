@@ -306,6 +306,63 @@ describe('program-status ingress into the hook server store', () => {
     expect(h.visibleAt(PANE)?.shown.summary.aggregate).toBe('working')
   })
 
+  it('a report taken before the pane exists publishes when the pane binds, with no later report', () => {
+    const h = harness()
+    h.targets.delete(PTY)
+    // A reattach reply: the program reported long ago and is silent now.
+    h.ingress.register(PTY, fact(4, view('blocked', 2)))
+    expect(h.rows).toEqual([])
+    h.targets.set(PTY, { paneKey: PANE, tabId: 'tab-1', worktreeId: 'wt-1' })
+    h.ingress.paneBound(PANE)
+    expect(h.visibleAt(PANE)).toMatchObject({ ptyId: PTY, incarnationId: 'inc-1', reportSeq: 4 })
+    expect(h.visibleAt(PANE)?.shown.summary.aggregate).toBe('blocked')
+    expect(h.ops).toEqual(['report'])
+    // Once published, a repeated bind and an equal fact write nothing; a greater fact applies.
+    h.reset()
+    h.ingress.paneBound(PANE)
+    h.ingress.fact(PTY, fact(4, view('done', 3)))
+    expect(h.ops).toEqual([])
+    h.ingress.fact(PTY, fact(5, view('done', 3)))
+    expect(h.visibleAt(PANE)).toMatchObject({ reportSeq: 5 })
+  })
+
+  it('a local fact taken before the pane exists publishes when the pane binds', () => {
+    const h = harness()
+    h.targets.delete(PTY)
+    const local = createProgramStatusLocalIngest(h.ingress)
+    local.begin(PTY, 'inc-1')
+    local.observe(PTY, report('state=working'), 2_000)
+    h.targets.set(PTY, { paneKey: PANE, tabId: 'tab-1', worktreeId: 'wt-1' })
+    h.ingress.paneBound(PANE)
+    expect(h.visibleAt(PANE)?.shown.summary.aggregate).toBe('working')
+  })
+
+  it('a bind publishes nothing for an unregistered incarnation, a closed pane or a detached PTY', () => {
+    const h = harness()
+    h.targets.delete(PTY)
+    // A fact that overtook its reply waits for the registration, which adopts its reportSeq.
+    h.ingress.fact(PTY, fact(3, view('working', 1)))
+    h.targets.set(PTY, { paneKey: PANE, tabId: 'tab-1', worktreeId: 'wt-1' })
+    h.ingress.paneBound(PANE)
+    expect(h.rows).toEqual([])
+    h.ingress.register(PTY, EMPTY_SNAPSHOT)
+    expect(h.visibleAt(PANE)).toMatchObject({ reportSeq: 3 })
+    // A pane closed before the bind stays closed.
+    h.targets.delete('pty-2')
+    h.ingress.register('pty-2', fact(1, view('done', 1), view('done', 1), 'inc-2'))
+    h.server.closeProgramStatusPane(OTHER_PANE)
+    h.targets.set('pty-2', { paneKey: OTHER_PANE, tabId: 'tab-2', worktreeId: 'wt-1' })
+    h.ingress.paneBound(OTHER_PANE)
+    expect(h.slotAt(OTHER_PANE)).toBeUndefined()
+    // The pane rebound to pty-2: the detached PTY never comes back through a later bind.
+    h.server.reopenProgramStatusPane(OTHER_PANE)
+    h.ingress.resyncPane(PANE, 'pty-2', h.always)
+    h.reset()
+    h.ingress.paneBound(PANE)
+    expect(h.ops).toEqual([])
+    expect(h.visibleAt(PANE)).toMatchObject({ ptyId: 'pty-2' })
+  })
+
   it('an attribution move rekeys, with the current report as fallback, and keeps the dismissal', () => {
     const h = harness()
     h.ingress.register(PTY, EMPTY_SNAPSHOT)
