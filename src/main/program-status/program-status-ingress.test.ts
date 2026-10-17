@@ -143,8 +143,14 @@ describe('program-status ledger: the lifecycle event table', () => {
     expect(step.lifecycle).toBeUndefined()
   })
 
-  it('drops an equal or lower reportSeq and any fact of another incarnation', () => {
-    const ledger = applyProgramStatusFact(registered(), fact(3, view('working', 1))).ledger
+  it('drops an equal or lower reportSeq and any fact of the incarnation it replaced', () => {
+    const replaced = registerProgramStatusIncarnation(
+      createProgramStatusLedger(PTY, 10),
+      fact(0, null, null, 'inc-0'),
+      10
+    ).ledger
+    const current = registerProgramStatusIncarnation(replaced, EMPTY_SNAPSHOT, 10).ledger
+    const ledger = applyProgramStatusFact(current, fact(3, view('working', 1))).ledger
     for (const late of [
       fact(3, view('done', 2)),
       fact(2, view('done', 2)),
@@ -154,6 +160,48 @@ describe('program-status ledger: the lifecycle event table', () => {
       expect(step.ledger).toBe(ledger)
       expect(step.report).toBeUndefined()
     }
+  })
+
+  it('holds a replacement incarnation fact that overtakes its reply, and registration adopts it', () => {
+    const live = applyProgramStatusFact(registered(), fact(3, view('done', 1))).ledger
+    const exited = exitProgramStatusLedger(live, 50).ledger
+    // Why: a respawn under the same PTY id can relay its first report before its reply lands.
+    const early = applyProgramStatusFact(exited, fact(2, view('working', 2), null, 'inc-2'))
+    expect(early.report).toBeUndefined()
+    expect(early.lifecycle).toBeUndefined()
+    expect(early.ledger).toMatchObject({ incarnationId: 'inc-1', reportSeq: 3, phase: 'exited' })
+    const step = registerProgramStatusIncarnation(early.ledger, fact(0, null, null, 'inc-2'), 80)
+    expect(step.ledger).toMatchObject({ incarnationId: 'inc-2', reportSeq: 2, pending: [] })
+    expect(step.report).toMatchObject({ reportSeq: 2, shown: view('working', 2), liveness: 'live' })
+    expect(step.replaced).toEqual({ ptyId: PTY, incarnationId: 'inc-1' })
+    // The incarnation it replaced stays dropped, even with a greater reportSeq.
+    const late = applyProgramStatusFact(step.ledger, fact(9, view('error', 9)))
+    expect(late.ledger).toBe(step.ledger)
+    expect(late.report).toBeUndefined()
+  })
+
+  it('never publishes a held fact of another incarnation, and holds at most two of them', () => {
+    let ledger = registered()
+    for (const early of [
+      fact(4, view('working', 1), null, 'inc-a'),
+      fact(5, view('done', 2), null, 'inc-b'),
+      fact(6, view('error', 3), null, 'inc-c'),
+      fact(7, view('done', 4), null, 'inc-c')
+    ]) {
+      const step = applyProgramStatusFact(ledger, early)
+      expect(step.report).toBeUndefined()
+      expect(step.lifecycle).toBeUndefined()
+      ledger = step.ledger
+    }
+    expect(ledger).toMatchObject({ incarnationId: 'inc-1', reportSeq: 0 })
+    expect(ledger.pending.map((held) => [held.incarnationId, held.reportSeq])).toEqual([
+      ['inc-b', 5],
+      ['inc-c', 7]
+    ])
+    // A registration adopts only its own held fact and discards the rest.
+    const step = registerProgramStatusIncarnation(ledger, fact(0, null, null, 'inc-d'), 20)
+    expect(step.ledger).toMatchObject({ incarnationId: 'inc-d', reportSeq: 0, pending: [] })
+    expect(step.report).toMatchObject({ reportSeq: 0, shown: null })
   })
 
   it('holds early facts per incarnation and registration adopts the greater of snapshot and pending', () => {
@@ -396,6 +444,21 @@ describe('program-status ingress into the hook server store', () => {
     // A late fact of a replaced incarnation is dropped by its id.
     h.ingress.fact(PTY, fact(9, view('error', 9), null, 'inc-2'))
     expect(h.slotAt(PANE)).toBeUndefined()
+  })
+
+  it('a respawn whose first report overtakes its reply shows that report once it registers', () => {
+    const h = harness()
+    h.ingress.register(PTY, EMPTY_SNAPSHOT)
+    h.ingress.fact(PTY, fact(1, view('done', 1)))
+    h.ingress.exited(PTY)
+    h.reset()
+    h.ingress.fact(PTY, fact(1, view('working', 2), null, 'inc-2'))
+    expect(h.ops).toEqual([])
+    expect(h.visibleAt(PANE)).toMatchObject({ incarnationId: 'inc-1', liveness: 'exited' })
+    // The reply's snapshot predates the report and is empty; the program reports nothing more.
+    h.ingress.register(PTY, fact(0, null, null, 'inc-2'))
+    expect(h.visibleAt(PANE)).toMatchObject({ incarnationId: 'inc-2', reportSeq: 1 })
+    expect(h.visibleAt(PANE)?.shown.summary.aggregate).toBe('working')
   })
 
   it('certified exit keeps done and error on the open pane and drops working', () => {

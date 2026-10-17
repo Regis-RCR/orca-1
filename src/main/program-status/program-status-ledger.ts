@@ -14,7 +14,7 @@ import type {
 
 export type ProgramStatusLedger = {
   readonly ptyId: string
-  /** `null` until the incarnation registers; facts that arrive earlier wait in `pending`. */
+  /** `null` until an incarnation registers; facts of any other incarnation wait in `pending`. */
   readonly incarnationId: string | null
   readonly reportSeq: number
   readonly observation: ProgramStatusObservation
@@ -23,6 +23,8 @@ export type ProgramStatusLedger = {
   readonly phaseChangedAt: number
   /** The highest fact per not-yet-registered incarnation, at most two incarnations. */
   readonly pending: readonly ProgramStatusFact[]
+  /** Incarnations this ledger replaced, the latest two; their late facts are dropped. */
+  readonly retired: readonly string[]
 }
 
 export type ProgramStatusLedgerStep = {
@@ -44,7 +46,8 @@ export function createProgramStatusLedger(ptyId: string, at: number): ProgramSta
     observation: EMPTY,
     phase: 'live',
     phaseChangedAt: at,
-    pending: []
+    pending: [],
+    retired: []
   }
 }
 
@@ -104,22 +107,34 @@ function withReport(ledger: ProgramStatusLedger): ProgramStatusLedgerStep {
   return { ledger, report: programStatusLedgerReport(ledger) }
 }
 
+/** Keeps the highest fact of an incarnation that has not registered yet; it publishes nothing. */
+function holdProgramStatusFact(
+  ledger: ProgramStatusLedger,
+  fact: ProgramStatusFact
+): ProgramStatusLedgerStep {
+  const held = ledger.pending.find((entry) => entry.incarnationId === fact.incarnationId)
+  if (held && held.reportSeq >= fact.reportSeq) {
+    return { ledger }
+  }
+  const others = ledger.pending.filter((entry) => entry !== held)
+  const pending = [...others, fact].slice(-PENDING_INCARNATIONS_MAX)
+  return { ledger: { ...ledger, pending } }
+}
+
 /** A fact or a snapshot of the registered incarnation; anything else is held or dropped. */
 export function applyProgramStatusFact(
   ledger: ProgramStatusLedger,
   fact: ProgramStatusFact
 ): ProgramStatusLedgerStep {
-  if (ledger.incarnationId === null) {
-    const held = ledger.pending.find((entry) => entry.incarnationId === fact.incarnationId)
-    if (held && held.reportSeq >= fact.reportSeq) {
-      return { ledger }
-    }
-    const others = ledger.pending.filter((entry) => entry !== held)
-    const pending = [...others, fact].slice(-PENDING_INCARNATIONS_MAX)
-    return { ledger: { ...ledger, pending } }
+  // Why: a replaced incarnation's late fact is dropped by its id.
+  if (ledger.retired.includes(fact.incarnationId)) {
+    return { ledger }
   }
-  // Why: a replaced incarnation's late fact is dropped by its id, an equal one is a no-op.
-  if (fact.incarnationId !== ledger.incarnationId || fact.reportSeq <= ledger.reportSeq) {
+  // Why: a respawn under the same PTY id can report before its reply registers it.
+  if (fact.incarnationId !== ledger.incarnationId) {
+    return holdProgramStatusFact(ledger, fact)
+  }
+  if (fact.reportSeq <= ledger.reportSeq) {
     return { ledger }
   }
   return withReport({ ...ledger, reportSeq: fact.reportSeq, observation: fact.observation })
@@ -145,7 +160,10 @@ export function registerProgramStatusIncarnation(
     ...createProgramStatusLedger(ledger.ptyId, at),
     incarnationId,
     reportSeq: first.reportSeq,
-    observation: first.observation
+    observation: first.observation,
+    retired: replaced
+      ? [...ledger.retired, replaced.incarnationId].slice(-PENDING_INCARNATIONS_MAX)
+      : ledger.retired
   }
   return { ...withReport(next), ...(replaced ? { replaced } : {}) }
 }
