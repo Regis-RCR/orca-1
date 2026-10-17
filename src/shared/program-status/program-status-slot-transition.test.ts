@@ -162,6 +162,15 @@ describe('applyProgramStatusWrite: lifecycle', () => {
     })
   })
 
+  it('refuses an exit that omits shown, so an onExit slot never holds the pre-exit view', () => {
+    for (const liveness of ['live', 'unverifiable'] as const) {
+      const prev = slotFrom(reportWrite(5, view(4), liveness))
+      const result = applyProgramStatusWrite(prev, lifecycleWrite('exited', 400))
+      expect(result).toEqual({ accepted: false, next: prev })
+      expect(result.next).toBe(prev)
+    }
+  })
+
   it('treats exited as absorbing for lifecycle writes', () => {
     const prev = slotFrom(reportWrite(5, view(4), 'exited'))
     expect(applyProgramStatusWrite(prev, lifecycleWrite('live', 500)).accepted).toBe(false)
