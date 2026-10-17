@@ -9,7 +9,10 @@ import {
   removePaneKeysByTabPrefix
 } from './agent-status-pane-keyed-records'
 import { findCompletedOrphanPaneKeysForTabClose } from './agent-status-pane-key-tab-binding'
-import { programStatusTabClosedPatch } from './program-status-pane-mirror'
+import {
+  programStatusPanesClosedPatch,
+  programStatusTabClosedPatch
+} from './program-status-pane-mirror'
 
 /** Slices that only the fold touched, so the batch commits as a MERGE. */
 export function buildAgentStatusBatchPatch(
@@ -207,6 +210,14 @@ export function buildAgentStatusTabPrefixDropPatch(
       sortEpoch: hadLive || migrationUnsupported.changed ? s.sortEpoch + 1 : s.sortEpoch
     }
   }
-  const patch = { ...buildPatch(), ...programStatusTabClosedPatch(s, tabIdPrefix) }
+  // Why: a pane-scoped drop retires only those panes, so their siblings keep their slot rows.
+  const programStatusPatch = opts?.paneKeys
+    ? programStatusPanesClosedPatch(
+        s,
+        Object.keys(s.programStatusByPaneKey ?? {}).filter(matchesPane),
+        true
+      )
+    : programStatusTabClosedPatch(s, tabIdPrefix)
+  const patch = { ...buildPatch(), ...programStatusPatch }
   return { patch, hadLive }
 }

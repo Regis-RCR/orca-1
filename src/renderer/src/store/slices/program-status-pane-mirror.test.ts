@@ -20,6 +20,7 @@ import { buildDashboardSnapshot } from '../../components/dashboard/build-dashboa
 import { dashboardSnapshotInputsChanged } from '../../components/dashboard/useDashboardPopoutBridge'
 import { patchDashboardSnapshotFromAgentStatus } from '../../components/dashboard-popout/dashboard-agent-status-patch'
 import { useDashboardSnapshot } from '../../components/dashboard-popout/useDashboardSnapshot'
+import { buildAgentStatusTabPrefixDropPatch } from './agent-status-drop-reducer'
 import { syncProgramStatusPreferred } from './program-status-pane-mirror'
 import { createTestStore } from './store-test-helpers'
 
@@ -181,6 +182,23 @@ describe('the mirror follows the slot lifecycle, never the hook row', () => {
     const state = store.getState()
     expect(Object.keys(state.programStatusByPaneKey)).toEqual([OTHER_TAB_PANE])
     expect(state.programStatusClosedPaneKeys).toEqual({ [PANE]: true, [SIBLING]: true })
+  })
+
+  it('a pane-scoped drop closes only those panes, so a sibling keeps its record and rows', () => {
+    const store = withSlots()
+    const before = store.getState()
+    const { patch } = buildAgentStatusTabPrefixDropPatch(before, 'tab1', [], {
+      paneKeys: new Set([PANE])
+    })
+    store.setState(patch)
+    const state = store.getState()
+    expect(state.programStatusByPaneKey[PANE]).toBeUndefined()
+    expect(state.programStatusByPaneKey[SIBLING]).toBe(before.programStatusByPaneKey[SIBLING])
+    expect(state.programStatusClosedPaneKeys).toEqual({ [PANE]: true })
+    store.getState().applyProgramStatusPaneRows([row(SIBLING, 9, slot('working'))])
+    expect(store.getState().programStatusByPaneKey[SIBLING]?.revision).toBe(9)
+    store.getState().applyProgramStatusPaneRows([row(PANE, 10)])
+    expect(store.getState().programStatusByPaneKey[PANE]).toBeUndefined()
   })
 
   it('a removed pane deletes the record without recording a closure', () => {
