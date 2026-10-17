@@ -98,7 +98,9 @@ In main, a pure ledger per PTY keeps the registered incarnation, the highest `re
 observation and the lifecycle phase. It applies a fact only for the registered incarnation and a
 greater `reportSeq`, holds facts that overtake their control reply until the incarnation registers,
 and turns each event into at most one report write and one lifecycle write. The ingress attributes
-each PTY to a pane with the rule OSC 9999 already uses and writes into the hook server store.
+each PTY to a pane with the rule OSC 9999 already uses and writes into the hook server store. A
+report that arrives before the PTY has a pane waits in the ledger and is written once a spawn commit
+or a leaf move binds a pane, even if the program reports nothing more.
 
 ### The probe, answered at the startup ingress, before DA1
 
