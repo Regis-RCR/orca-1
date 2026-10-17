@@ -211,12 +211,10 @@ export function buildAgentStatusTabPrefixDropPatch(
     }
   }
   // Why: a pane-scoped drop retires only those panes, so their siblings keep their slot rows.
+  // Every named pane is marked closed, even one with no slot yet, so a late row cannot create it;
+  // deletion still reaches only existing records.
   const programStatusPatch = opts?.paneKeys
-    ? programStatusPanesClosedPatch(
-        s,
-        Object.keys(s.programStatusByPaneKey ?? {}).filter(matchesPane),
-        true
-      )
+    ? programStatusPanesClosedPatch(s, [...opts.paneKeys].filter(matchesPane), true)
     : programStatusTabClosedPatch(s, tabIdPrefix)
   const patch = { ...buildPatch(), ...programStatusPatch }
   return { patch, hadLive }

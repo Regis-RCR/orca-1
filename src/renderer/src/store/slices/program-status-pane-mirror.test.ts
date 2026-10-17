@@ -201,6 +201,23 @@ describe('the mirror follows the slot lifecycle, never the hook row', () => {
     expect(store.getState().programStatusByPaneKey[PANE]).toBeUndefined()
   })
 
+  it('a pane-scoped drop closes a named pane that has no slot yet, so a late row stays out', () => {
+    const store = createTestStore()
+    store.getState().applyProgramStatusPaneRows([row(SIBLING, 3)])
+    const before = store.getState()
+    const { patch } = buildAgentStatusTabPrefixDropPatch(before, 'tab1', [], {
+      paneKeys: new Set([PANE])
+    })
+    store.setState(patch)
+    const state = store.getState()
+    expect(state.programStatusByPaneKey[SIBLING]).toBe(before.programStatusByPaneKey[SIBLING])
+    expect(state.programStatusClosedPaneKeys).toEqual({ [PANE]: true })
+    store.getState().applyProgramStatusPaneRows([row(PANE, 4)])
+    expect(store.getState().programStatusByPaneKey[PANE]).toBeUndefined()
+    store.getState().applyProgramStatusPaneRows([row(SIBLING, 9, slot('working'))])
+    expect(store.getState().programStatusByPaneKey[SIBLING]?.revision).toBe(9)
+  })
+
   it('a removed pane deletes the record without recording a closure', () => {
     const store = withSlots()
     store.getState().dropAgentStatus(PANE, { paneRemoved: true })
