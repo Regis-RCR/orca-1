@@ -146,9 +146,9 @@ slot, composition returns the original hook map. Cache tokens retain their legac
   applies a newer snapshot first, then goes live again.
 - **Incarnation replaced:** a late fact of the old incarnation is dropped by its id.
 - **Pane retired, tab closed, worktree removed:** the slot's own closure record refuses writes, while
-  the ledger keeps tracking. When the renderer restores the pane, main resyncs the slot from the
-  ledger, but only once its own pane and PTY maps name that pair on both sides; otherwise the
-  request waits for the next spawn commit or leaf move.
+  the ledger keeps tracking. When the renderer restores the pane, main reopens it and resyncs the
+  slot from the ledger, but only once its own pane and PTY maps name that pair on both sides;
+  otherwise the pane stays closed and the request waits for the next spawn commit or leaf move.
 - **Freshness:** a live slot never expires, since the protocol has no heartbeat. A slot that is no
   longer live decays on the reader's usual 30 minute window, measured from the last moment Orca
   could verify its producer.
@@ -230,9 +230,9 @@ validation failures can discard the report. Invalid `progress` values are treate
 - An agent that reports only through 7501 shows on the desktop sidebar, dashboard, pop-out, worktree
   card, tabs and opted-in `worktree ps`, but raises no notification or unread mark, does not keep
   the computer awake and is not shown on mobile.
-- A retired pane refuses 7501 writes until the renderer restores it; the restore resyncs what the
-  program reported meanwhile, once main's own pane and PTY maps name that pair. A pane that main
-  moves itself (`src/main/runtime/orca-runtime.ts:213`, compiled only into an
+- A retired pane refuses 7501 writes until a restore of it binds: main reopens the pane and resyncs
+  what the program reported meanwhile only once its own pane and PTY maps name that pair. A pane
+  that main moves itself (`src/main/runtime/orca-runtime.ts:213`, compiled only into an
   `ORCA_LAYOUT_OWNER=main` test build, which packaging refuses) sends no binding notification, so
   a restore waiting on it is not re-read and its slot can stay missing.
 - Past 500 slot records, an evicted slot of a live PTY can remain absent until a subsequent
