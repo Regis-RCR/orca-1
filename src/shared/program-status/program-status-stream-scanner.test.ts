@@ -392,7 +392,78 @@ describe('program status stream scanner: prompt start', () => {
     const { events } = scanChunks([frame('state=working'), sequence], 0)
     expect(events.map(describeEvent)).toEqual(['working', 'prompt-start'])
     const start = frame('state=working').length
-    expect(events[1]).toEqual({ kind: 'prompt-start', start, end: start + 7 })
+    expect(events[1]).toEqual({ kind: 'prompt-start', start, end: start + sequence.length })
+  })
+
+  it.each([
+    ['a bare parameter separator', [`${ESC}]133;A;`]],
+    ['parameters', [`${ESC}]133;A;cl=m;aid=7`]],
+    ['parameters, then output', [`${ESC}]133;A;cl=m`, '\r\nmore output ']]
+  ])('reports nothing for a prompt start with %s and no terminator', (_label, chunks) => {
+    const { events, scanner } = scanChunks([frame('state=working'), ...chunks])
+    expect(events.map(describeEvent)).toEqual(['working'])
+    expect(scanner.retainedCodeUnits()).toBeLessThanOrEqual(4096)
+  })
+
+  it.each([
+    ['RIS', `${ESC}c`, ['working', 'reset']],
+    ['a report', frame('state=done'), ['working', 'done']],
+    ['a CSI sequence', `${ESC}[0m`, ['working']]
+  ])('reports no prompt start ended by a bare ESC that starts %s', (_label, next, expected) => {
+    for (const open of [`${ESC}]133;A`, `${ESC}]133;A;cl=m`]) {
+      const input = `${frame('state=working')}${open}${next}`
+      expect(scanChunks([input]).events.map(describeEvent), open).toEqual(expected)
+      expect(scanChunks(input.split('')).events.map(describeEvent), open).toEqual(expected)
+    }
+  })
+
+  it.each([
+    ['BEL', BEL],
+    ['ST', ST]
+  ])('reports a prompt start once its %s arrives, whatever the chunk split', (_label, end) => {
+    const sequence = `${ESC}]133;A;cl=m;aid=7${end}`
+    const input = `${frame('state=working')}${sequence}prompt$ `
+    const start = frame('state=working').length
+    const expected = [
+      { kind: 'prompt-start', start, end: start + sequence.length }
+    ] satisfies ProgramStatusScanEvent[]
+    for (let split = 1; split < input.length; split += 1) {
+      const { events } = scanChunks([input.slice(0, split), input.slice(split)], 0)
+      expect(events.slice(1), `split at ${split}`).toEqual(expected)
+    }
+    expect(scanChunks(input.split(''), 0).events.slice(1)).toEqual(expected)
+  })
+
+  it('accepts a prompt start of exactly 4096 bytes and drops a longer one', () => {
+    const head = `${ESC}]133;A;x=`
+    const fits = `${head}${'a'.repeat(4096 - head.length - 1)}${BEL}`
+    expect(Buffer.byteLength(fits)).toBe(4096)
+    const over = `${head}a${fits.slice(head.length)}`
+    expect(scanChunks([frame('state=working'), fits]).events.map(describeEvent)).toEqual([
+      'working',
+      'prompt-start'
+    ])
+    expect(scanChunks([frame('state=working'), over]).events.map(describeEvent)).toEqual([
+      'working'
+    ])
+  })
+
+  it('drops an over-long unterminated prompt start within the frame bound', () => {
+    const scanner = createProgramStatusStreamScanner()
+    const { sink, events } = createModelSink()
+    let seq = 0
+    const feed = (chunk: string) => {
+      scanner.scan(chunk, seq, sink)
+      seq += chunk.length
+    }
+    feed(`${frame('state=working')}${ESC}]133;A;`)
+    for (let index = 0; index < 100; index += 1) {
+      feed('a'.repeat(1024))
+      expect(scanner.retainedCodeUnits()).toBeLessThanOrEqual(4096)
+    }
+    expect(scanner.retainedCodeUnits()).toBe(0)
+    feed(`${BEL}${frame('state=done')}`)
+    expect(events.map(describeEvent)).toEqual(['working', 'done'])
   })
 
   it('does not report OSC 133;B or a longer command letter', () => {
