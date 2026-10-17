@@ -3,7 +3,9 @@
 This note records why Orca reads the Program Status Protocol (OSC 7501) the way it does: the
 problem, what the protocol and a real capture constrain, the architecture, compatibility, scope,
 the alternatives that were rejected and the known limits. The code is the reference for details;
-this note is about the choices.
+this note is about the choices. The design lands in two parts: part 1 adds the parsing and
+tracking core and this note, and part 2 wires the probe answer, the ingestion, the store slot, the
+readers and the setting. The sections below describe the state once both parts are merged.
 
 ## Problem
 

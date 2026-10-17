@@ -55,13 +55,16 @@ function utf8Bytes(text: string): number {
   return measureUtf8ByteLength(text, { stopAfterBytes: MAX_FRAME + 1 }).byteLength
 }
 
-/** `ESC ] 133 ; A` is a prompt start when its terminator or a parameter follows. */
-function endsPromptStart(code: number): boolean {
+/** `ESC ] 133 ; A` can be a prompt start only when a terminator or a parameter follows. */
+function continuesPromptStart(code: number): boolean {
   return code === 0x07 || code === ESC || code === 0x3b
 }
 
+type FrameKind = 'report' | 'prompt'
+
 class StreamScanner implements ProgramStatusStreamScanner {
   private inFrame = false
+  private frameKind: FrameKind = 'report'
   // Outside a frame: a partial prefix. In a frame: the frame so far, `null` once over the cap.
   private pending: string | null = ''
   private pendingStart = 0
@@ -153,13 +156,10 @@ class StreamScanner implements ProgramStatusStreamScanner {
         return
       }
       if (at === nextReport) {
-        const close = this.terminatorAt(text, at + REPORT_PREFIX.length)
-        if (close === -1) {
-          this.openFrame(text, at)
+        const end = this.frameAt(text, at, REPORT_PREFIX.length, 'report', sink)
+        if (end === -1) {
           return
         }
-        const end = close + this.terminatorLength
-        this.emitFrame(text.slice(at, end), this.seqAt(at), this.seqAt(end), sink)
         position = end
       } else if (at === nextReset) {
         sink.onEvent({ kind: 'reset', start: this.seqAt(at), end: this.seqAt(at + 2) })
@@ -170,12 +170,36 @@ class StreamScanner implements ProgramStatusStreamScanner {
           this.keepPrefix(text, at)
           return
         }
-        position = endsPromptStart(text.charCodeAt(after)) ? after : at + 1
-        if (position === after) {
-          sink.onEvent({ kind: 'prompt-start', start: this.seqAt(at), end: this.seqAt(after) })
+        if (!continuesPromptStart(text.charCodeAt(after))) {
+          position = at + 1
+          continue
         }
+        const end = this.frameAt(text, at, PROMPT_START.length, 'prompt', sink)
+        if (end === -1) {
+          return
+        }
+        position = end
       }
     }
+  }
+
+  /** Emits the sequence at `at` through its terminator; -1 when it stays open past `text`. */
+  private frameAt(
+    text: string,
+    at: number,
+    prefixLength: number,
+    kind: FrameKind,
+    sink: ProgramStatusScanSink
+  ): number {
+    this.frameKind = kind
+    const close = this.terminatorAt(text, at + prefixLength)
+    if (close === -1) {
+      this.openFrame(text, at)
+      return -1
+    }
+    const end = close + this.terminatorLength
+    this.emitFrame(text.slice(at, end), this.seqAt(at), this.seqAt(end), sink)
+    return end
   }
 
   private carryTail(text: string, from: number, resetArmed: boolean, promptArmed: boolean): void {
@@ -258,7 +282,16 @@ class StreamScanner implements ProgramStatusStreamScanner {
 
   /** `frame` is the sequence through its terminator, or `null` once it broke the cap. */
   private emitFrame(frame: string | null, start: number, end: number, sink: ProgramStatusScanSink) {
-    if (frame === null || utf8Bytes(frame) > MAX_FRAME) {
+    const overCap = frame === null || utf8Bytes(frame) > MAX_FRAME
+    if (this.frameKind === 'prompt') {
+      // Why: a prompt start drops records, so only a whole one counts: BEL or ST, as the shell
+      // lifecycle scanner reads OSC 133. A bare ESC, a missing end or an oversized body is none.
+      if (!overCap && this.terminatorLength !== 0) {
+        sink.onEvent({ kind: 'prompt-start', start, end })
+      }
+      return
+    }
+    if (overCap) {
       const result = { kind: 'discard', reason: 'frame-limit', skippedPairs: 0 } as const
       sink.onEvent({ kind: 'report', start, end, result })
       return
