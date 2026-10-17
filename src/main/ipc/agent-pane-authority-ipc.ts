@@ -30,10 +30,15 @@ export function registerAgentPaneAuthorityIpcHandlers(
     }
     try {
       agentHookServer.restorePaneAuthority(paneKey)
-      agentHookServer.reopenProgramStatusPane(paneKey)
       // Why: lifting the closure never restores what it dropped; a silent program would stay hidden.
+      // The closure lifts only with an accepted resync, so a stale pair never reopens the pane.
       if (isPtyId(ptyId) && ownership.bindsPane) {
-        installedProgramStatusIngress()?.ingress.resyncPane(paneKey, ptyId, ownership.bindsPane)
+        installedProgramStatusIngress()?.ingress.resyncPane(
+          paneKey,
+          ptyId,
+          ownership.bindsPane,
+          (key) => agentHookServer.reopenProgramStatusPane(key)
+        )
       }
     } catch (err) {
       console.warn('[agent-hooks] restorePaneAuthority failed:', err)

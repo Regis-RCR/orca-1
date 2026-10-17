@@ -64,7 +64,13 @@ type Attribution = {
   stored: ProgramStatusLiveness | null
 }
 
-type ParkedResync = { paneKey: string; ptyId: string; bindsPane: ProgramStatusPaneBinding }
+type ParkedResync = {
+  paneKey: string
+  ptyId: string
+  bindsPane: ProgramStatusPaneBinding
+  /** Lifts the pane's closure; run only once the binding proof has passed. */
+  reopen?: (paneKey: string) => void
+}
 
 export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
   const { sink } = deps
@@ -166,7 +172,10 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
     }
   }
 
-  const resync = ({ paneKey, ptyId }: ParkedResync): void => {
+  const resync = ({ paneKey, ptyId, reopen }: ParkedResync): void => {
+    // Why here and not at the request: the old PTY may still target the pane, and an open
+    // pane would take its next report while main binds the pane to another PTY.
+    reopen?.(paneKey)
     const key = canonical(paneKey)
     detachOthers(key, ptyId)
     const entry = entries.get(ptyId)
@@ -239,9 +248,14 @@ export function createProgramStatusIngress(deps: ProgramStatusIngressDeps) {
         sink.forget(paneKey, identity, { ptyRetired: true })
       }
     },
-    resyncPane(paneKey: string, ptyId: string, bindsPane: ProgramStatusPaneBinding): void {
+    resyncPane(
+      paneKey: string,
+      ptyId: string,
+      bindsPane: ProgramStatusPaneBinding,
+      reopen?: (paneKey: string) => void
+    ): void {
       const key = canonical(paneKey)
-      const request = { paneKey, ptyId, bindsPane }
+      const request = { paneKey, ptyId, bindsPane, reopen }
       // Why park, never drop: the leaf-move and rebind resyncs land before main's maps agree.
       if (!bindsPane(paneKey, ptyId)) {
         park(key, request)

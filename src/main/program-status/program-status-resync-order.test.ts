@@ -490,6 +490,42 @@ describe('binding proof before any mutation', () => {
     expect(h.visibleAt(P)?.ptyId).toBe('x')
   })
 
+  it('20: a stale restore keeps a retired pane closed; the replaced PTY cannot republish there', () => {
+    const h = harness()
+    const P = h.pane('a')
+    h.spawn('x', P, 'working')
+    // The PTY is replaced: main now binds the pane to y, and the renderer still names x.
+    h.spawn('y', P)
+    h.retire(P)
+    h.published()
+    h.restore(P, 'x')
+    h.local.observe('x', report('state=error'), 3_000)
+    expect(h.slotAt(P)).toBeUndefined()
+    expect(h.published()).toEqual([])
+    // The bound pair reopens the pane, and the replaced PTY stays detached from it.
+    h.restore(P, 'y')
+    h.local.observe('x', report('state=done'), 4_000)
+    expect(h.slotAt(P)).toBeUndefined()
+    h.local.observe('y', report('state=working'), 4_000)
+    expect(h.visibleAt(P)).toMatchObject({ ptyId: 'y', liveness: 'live' })
+  })
+
+  it('21: a parked restore of a retired pane reopens it only when the park resolves', async () => {
+    const h = harness()
+    const Q = h.pane('b')
+    h.targets.set('y', { paneKey: Q, worktreeId: 'wt-1' })
+    h.local.begin('y', h.inc('y'))
+    h.retire(Q)
+    h.restore(Q, 'y')
+    h.local.observe('y', report('state=working'), 2_000)
+    expect(h.slotAt(Q)).toBeUndefined()
+    rememberPaneKeyForPty('y', Q)
+    await flushMicrotasks()
+    expect(h.visibleAt(Q)).toMatchObject({ ptyId: 'y', liveness: 'live' })
+    h.local.observe('y', report('state=done'), 3_000)
+    expect(h.visibleAt(Q)?.shown.summary.aggregate).toBe('done')
+  })
+
   it('a malformed restore argument changes nothing and keeps the hook-side restore', async () => {
     const h = harness()
     const P = h.pane('a')
@@ -501,6 +537,9 @@ describe('binding proof before any mutation', () => {
     }
     expect(h.slotAt(P)).toBeUndefined()
     expect(restore).toHaveBeenCalledTimes(5)
+    // Nor does it lift the closure: with no proven pair, a later report still finds it closed.
+    h.local.observe('x', report('state=done'), 3_000)
+    expect(h.slotAt(P)).toBeUndefined()
     // Nor does it displace a parked request of the same pane.
     const Q = h.pane('b')
     h.targets.set('y', { paneKey: h.pane('y-lazy'), worktreeId: 'wt-1' })

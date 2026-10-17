@@ -25,6 +25,8 @@ vi.mock('electron', () => ({
 import { AgentHookServer, agentHookServer } from './server'
 import { registerAgentPaneAuthorityIpcHandlers } from '../ipc/agent-pane-authority-ipc'
 import { registerAgentStatusRowTeardownIpcHandlers } from '../ipc/agent-status-row-teardown-ipc'
+import { createProgramStatusIngress } from '../program-status/program-status-ingress'
+import { installProgramStatusIngress } from '../program-status/program-status-local-ingest'
 
 const PANE = makePaneKey('tab-1', LEAF_1)
 const SIBLING = makePaneKey('tab-1', LEAF_2)
@@ -256,22 +258,47 @@ describe('no slot path touches the hook row', () => {
 describe('renderer-originated closure reaches the slot through the IPC handlers', () => {
   beforeEach(() => {
     ipc.handlers.clear()
-    registerAgentPaneAuthorityIpcHandlers({ ownsPty: () => false })
+    registerAgentPaneAuthorityIpcHandlers({
+      ownsPty: () => false,
+      bindsPane: (_paneKey, ptyId) => ptyId === PTY.ptyId
+    })
     registerAgentStatusRowTeardownIpcHandlers()
+    installProgramStatusIngress(
+      createProgramStatusIngress({
+        sink: {
+          report: (target, write) =>
+            agentHookServer.ingestProgramStatusReport({ ...target, write }),
+          lifecycle: (paneKey, write) =>
+            agentHookServer.applyProgramStatusLifecycle(paneKey, write),
+          rekey: (from, to, identity, current) =>
+            agentHookServer.rekeyProgramStatus(from, to, identity, current),
+          forget: (paneKey, identity, options) =>
+            agentHookServer.forgetProgramStatus(paneKey, identity, options)
+        },
+        resolveTarget: () => undefined,
+        resolvePaneKey: (paneKey) => agentHookServer.resolveProgramStatusPaneKey(paneKey),
+        now: () => 1
+      })
+    )
   })
+
+  afterEach(() => installProgramStatusIngress(null))
 
   const send = (channel: string, ...args: unknown[]) => ipc.handlers.get(channel)?.({}, ...args)
   const paneOf = (tabId: string) => makePaneKey(tabId, LEAF_1)
   const slotAt = (paneKey: string) =>
     agentHookServer.getProgramStatusSnapshot().find((row) => row.paneKey === paneKey)
 
-  it('the retire handler closes the slot pane and the restore handler reopens it', () => {
+  it('the retire handler closes the slot pane; only a proven restore reopens it', () => {
     const paneKey = paneOf('tab-ipc-retire')
     agentHookServer.ingestProgramStatusReport({ paneKey, write: report(1) })
     send('agentStatus:retirePaneAuthority', paneKey)
     expect(slotAt(paneKey)).toBeUndefined()
     expect(agentHookServer.ingestProgramStatusReport({ paneKey, write: report(2) })).toBe(false)
     send('agentStatus:restorePaneAuthority', paneKey)
+    send('agentStatus:restorePaneAuthority', paneKey, 'pty-2')
+    expect(agentHookServer.ingestProgramStatusReport({ paneKey, write: report(2) })).toBe(false)
+    send('agentStatus:restorePaneAuthority', paneKey, PTY.ptyId)
     expect(agentHookServer.ingestProgramStatusReport({ paneKey, write: report(2) })).toBe(true)
     agentHookServer.forgetProgramStatus(paneKey, PTY, { ptyRetired: true })
   })
@@ -290,7 +317,7 @@ describe('renderer-originated closure reaches the slot through the IPC handlers'
     agentHookServer.ingestProgramStatusReport({ paneKey, tabId: 'tab-ipc-close', write: report(1) })
     send('agentStatus:dropByTabPrefix', 'tab-ipc-close')
     expect(slotAt(paneKey)).toBeUndefined()
-    send('agentStatus:restorePaneAuthority', paneKey)
+    send('agentStatus:restorePaneAuthority', paneKey, PTY.ptyId)
     expect(agentHookServer.ingestProgramStatusReport({ paneKey, write: report(2) })).toBe(false)
   })
 })
