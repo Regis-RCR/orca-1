@@ -163,13 +163,23 @@ describe('parseProgramStatusReport: duplicates', () => {
       kind: 'discard',
       reason: 'base64'
     })
-    expect(parseProgramStatusReport('state=done:id=a//b:id=a')).toMatchObject({
+    expect(parseProgramStatusReport(`state=done:id=${'x'.repeat(33)}:id=a`)).toMatchObject({
       kind: 'discard',
-      reason: 'id'
+      reason: 'pair-limit'
     })
     expect(parseProgramStatusReport(`state=done:app=${'a'.repeat(33)}:app=ok`)).toMatchObject({
       kind: 'discard',
       reason: 'pair-limit'
+    })
+  })
+
+  // Why: the id grammar decides which record a report addresses, which only the last value does.
+  it('checks the id grammar on the last occurrence only', () => {
+    expect(report('state=done:id=a//b:id=a').report.id).toBe('a')
+    expect(report('state=done:id=:id=a/b').report.id).toBe('a/b')
+    expect(parseProgramStatusReport('state=done:id=a:id=a//b')).toMatchObject({
+      kind: 'discard',
+      reason: 'id'
     })
   })
 })
