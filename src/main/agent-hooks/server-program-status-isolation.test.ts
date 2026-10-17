@@ -23,6 +23,7 @@ vi.mock('electron', () => ({
 }))
 
 import { AgentHookServer, agentHookServer } from './server'
+import { agentHookRuntimeDeps } from './agent-hook-runtime-deps'
 import { registerAgentPaneAuthorityIpcHandlers } from '../ipc/agent-pane-authority-ipc'
 import { registerAgentStatusRowTeardownIpcHandlers } from '../ipc/agent-status-row-teardown-ipc'
 import { createProgramStatusIngress } from '../program-status/program-status-ingress'
@@ -324,11 +325,21 @@ describe('renderer-originated closure reaches the slot through the IPC handlers'
 
 describe('worktree removal is wired into the slot', () => {
   it('the runtime removal dependency forgets program-status records too', () => {
-    const source = readFileSync(join(import.meta.dirname, 'agent-hook-runtime-deps.ts'), 'utf8')
-    const start = source.indexOf('dropAgentStatusForRemovedWorktree:')
-    expect(start).toBeGreaterThanOrEqual(0)
-    const wiring = source.slice(start, source.indexOf('buildAgentHookPtyEnv', start))
-    expect(wiring).toContain('server.dropStatusEntriesForRemovedWorktree(worktreeId, host)')
-    expect(wiring).toContain('server.forgetProgramStatusForRemovedWorktree(worktreeId, host)')
+    const server = new AgentHookServer()
+    hookRow(server)
+    slot(server)
+    server.ingestProgramStatusReport({
+      paneKey: makePaneKey('tab-2', LEAF_1),
+      tabId: 'tab-2',
+      worktreeId: 'wt-2',
+      write: { ...report(1), identity: { ptyId: 'pty-2', incarnationId: 'inc-2' } }
+    })
+    const deps = agentHookRuntimeDeps(server, { read: () => ({ kind: 'unobserved' }) }, () => ({}))
+    deps.dropAgentStatusForRemovedWorktree('wt-1', 'local')
+    expect(server.getStatusSnapshot()).toEqual([])
+    expect(server.getProgramStatusSnapshot().map((row) => row.paneKey)).toEqual([
+      makePaneKey('tab-2', LEAF_1)
+    ])
+    expect(server.ingestProgramStatusReport({ paneKey: PANE, write: report(2) })).toBe(false)
   })
 })
