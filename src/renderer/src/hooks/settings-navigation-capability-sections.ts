@@ -1,5 +1,6 @@
 import { LinearIcon } from '@/components/icons/LinearIcon'
 import { getAccountsPaneSearchEntries } from '@/components/settings/accounts-search'
+import { isAgentProgramStatusAvailable } from '@/components/settings/agent-program-status-availability'
 import { getAgentsPaneSearchEntries } from '@/components/settings/agents-search'
 import { getComputerUsePaneSearchEntries } from '@/components/settings/computer-use-search'
 import { getGeneralPaneSearchEntries } from '@/components/settings/general-search'
@@ -42,7 +43,7 @@ export function buildCapabilitySettingsSections({
       icon: Bot,
       searchEntries: getAgentsPaneSearchEntries({
         includeAgentAwake: !isWebClient,
-        includeAgentProgramStatus: !isWebClient,
+        includeAgentProgramStatus: !isWebClient && isAgentProgramStatusAvailable(),
         includeAgentRuntime: isLocalWindowsHost,
         includeAgentWorkspaceTrust: !isWebClient,
         includeCodexTerminalServerIsolation: !isWebClient

@@ -20,6 +20,12 @@ export function parseProgramStatusIntent(value: unknown): ProgramStatusIntent | 
     : { ingest: true }
 }
 
+/** The platform half of the announced scope. The settings switch reads it too, so the switch
+ *  shows exactly where a spawn can arm ingestion. */
+export function isProgramStatusPlatform(platform: string): boolean {
+  return platform === 'darwin'
+}
+
 /**
  * The announced scope: macOS desktop PTYs owned by main or by the daemon. Ingestion is not gated
  * on a probe, since a program may report without detecting support first. A daemon below the
@@ -30,7 +36,9 @@ export function resolveProgramStatusIntent(target: {
   provider: ProgramStatusOwnerProvider
   serveMode: boolean
 }): ProgramStatusIntent | undefined {
-  return target.platform === 'darwin' && target.provider !== 'relay' && !target.serveMode
+  return isProgramStatusPlatform(target.platform) &&
+    target.provider !== 'relay' &&
+    !target.serveMode
     ? { ingest: true, answerProbe: true }
     : undefined
 }

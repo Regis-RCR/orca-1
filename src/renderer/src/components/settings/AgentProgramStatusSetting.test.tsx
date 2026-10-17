@@ -18,6 +18,12 @@ import { LOCAL_SETTINGS_HOST_SCOPE } from './settings-host-scope'
 import { matchesSettingsSearch } from './settings-search'
 import { TooltipProvider } from '../ui/tooltip'
 
+const platformMock = vi.hoisted((): { platform: NodeJS.Platform } => ({ platform: 'darwin' }))
+
+vi.mock('@/lib/renderer-app-platform', () => ({
+  getRendererAppPlatform: () => platformMock.platform
+}))
+
 vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: () => ({
     detectedIds: [],
@@ -94,6 +100,7 @@ function renderPane(settings: GlobalSettings): string {
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, '__ORCA_WEB_CLIENT__')
+  platformMock.platform = 'darwin'
 })
 
 describe('the OSC 7501 precedence setting', () => {
@@ -149,13 +156,23 @@ describe('the OSC 7501 precedence setting', () => {
     expect(matchesSettingsSearch('prefer status', entries)).toBe(true)
   })
 
-  it('wires the desktop-only search entry through the settings navigation', () => {
-    const agents = (isWebClient: boolean) =>
-      buildCapabilitySettingsSections({
-        isMac: true,
-        isWindows: false,
-        isLocalWindowsHost: false,
-        isWindowsTerminalHost: false,
+  it('hides the switch off macOS, where no spawn arms OSC 7501 ingestion', () => {
+    for (const platform of ['linux', 'win32'] as const) {
+      platformMock.platform = platform
+      const markup = renderPane(getDefaultSettings('/tmp'))
+      expect(markup).not.toContain(getAgentProgramStatusTitle())
+      expect(markup).not.toContain(getAgentProgramStatusDescription())
+    }
+  })
+
+  it('wires the macOS desktop-only search entry through the settings navigation', () => {
+    const agents = (platform: NodeJS.Platform, isWebClient: boolean) => {
+      platformMock.platform = platform
+      return buildCapabilitySettingsSections({
+        isMac: platform === 'darwin',
+        isWindows: platform === 'win32',
+        isLocalWindowsHost: platform === 'win32',
+        isWindowsTerminalHost: platform === 'win32',
         isWebClient,
         nativeChatEnabled: false,
         managedBrowserCreationEnabled: false,
@@ -165,7 +182,10 @@ describe('the OSC 7501 precedence setting', () => {
         hostQueuesMessages: false,
         repos: []
       }).find((section) => section.id === 'agents')!
-    expect(matchesSettingsSearch('osc 7501', agents(false).searchEntries)).toBe(true)
-    expect(matchesSettingsSearch('osc 7501', agents(true).searchEntries)).toBe(false)
+    }
+    expect(matchesSettingsSearch('osc 7501', agents('darwin', false).searchEntries)).toBe(true)
+    expect(matchesSettingsSearch('osc 7501', agents('darwin', true).searchEntries)).toBe(false)
+    expect(matchesSettingsSearch('osc 7501', agents('linux', false).searchEntries)).toBe(false)
+    expect(matchesSettingsSearch('osc 7501', agents('win32', false).searchEntries)).toBe(false)
   })
 })

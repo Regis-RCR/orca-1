@@ -5,6 +5,7 @@ import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useAppStore } from '@/store'
 import { AgentAwakeSetting } from './AgentAwakeSetting'
 import { AgentProgramStatusSetting } from './AgentProgramStatusSetting'
+import { isAgentProgramStatusAvailable } from './agent-program-status-availability'
 import { AgentCacheTimerSection } from './AgentCacheTimerSection'
 import { AgentRuntimeSetting } from './AgentRuntimeSetting'
 import { CodexTerminalServerIsolationSetting } from './CodexTerminalServerIsolationSetting'
@@ -160,7 +161,9 @@ export function AgentsPane({
         <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
         {!isPairedWebClientWindow() ? (
           <>
-            <AgentProgramStatusSetting settings={settings} updateSettings={updateSettings} />
+            {isAgentProgramStatusAvailable() ? (
+              <AgentProgramStatusSetting settings={settings} updateSettings={updateSettings} />
+            ) : null}
             <AgentWorkspaceTrustSetting settings={settings} updateSettings={updateSettings} />
             <CodexTerminalServerIsolationSetting
               settings={settings}

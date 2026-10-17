@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isProgramStatusPlatform,
   parseProgramStatusIntent,
   resolveProgramStatusIntent,
   withoutProgramStatusIntent,
@@ -55,6 +56,23 @@ describe('resolveProgramStatusIntent: the announced scope', () => {
   it('leaves headless serve unarmed', () => {
     expect(resolve('darwin', 'local', true)).toBeUndefined()
     expect(resolve('darwin', 'daemon', true)).toBeUndefined()
+  })
+})
+
+describe('isProgramStatusPlatform: the platform half of the announced scope', () => {
+  it.each(['darwin', 'linux', 'win32', 'freebsd'])(
+    'agrees with what a local spawn on %s arms',
+    (platform) => {
+      const armed =
+        resolveProgramStatusIntent({ platform, provider: 'local', serveMode: false }) !== undefined
+      expect(isProgramStatusPlatform(platform)).toBe(armed)
+    }
+  )
+
+  it('holds on macOS only', () => {
+    expect(isProgramStatusPlatform('darwin')).toBe(true)
+    expect(isProgramStatusPlatform('linux')).toBe(false)
+    expect(isProgramStatusPlatform('win32')).toBe(false)
   })
 })
 
