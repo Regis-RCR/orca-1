@@ -48,7 +48,10 @@ export type ProgramStatusReportWrite = {
   prevNow?: ProgramStatusView | null
 }
 
-/** `shown` omitted keeps the view; `prevNow` rides only on the exit write, for the ack carry. */
+/**
+ * `shown` omitted keeps the view, so the exit write must carry it; `prevNow` rides only on the
+ * exit write, for the ack carry.
+ */
 export type ProgramStatusLifecycleWrite = {
   kind: 'lifecycle'
   identity: ProgramStatusIdentity

@@ -77,6 +77,10 @@ function applyLifecycle(
   if (prev.liveness === 'exited' && write.liveness !== 'exited') {
     return { accepted: false, next: prev }
   }
+  // Why: the exit replaces the view with onExit, so keeping the pre-exit view would label it onExit.
+  if (write.shown === undefined && programStatusViewNameForLiveness(write.liveness) !== prev.view) {
+    return { accepted: false, next: prev }
+  }
   const shown = write.shown === undefined ? prev.shown : write.shown
   // Why kept: a later lifecycle without a proof does not erase the one the exit brought.
   return slotOf(prev, prev.reportSeq, write, shown, prev.exitedFrom)

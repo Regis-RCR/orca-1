@@ -11,6 +11,7 @@ import {
   scanTranscriptForSecrets
 } from './pty-transcript-secret-scan.mjs'
 import { parseArgs, resolveSpawn } from './capture-agent-pty-transcript.mjs'
+import { parseProgramStatusReport } from '../../src/shared/program-status/program-status-report'
 
 describe('pty transcript secret scan', () => {
   it('finds the account row of a ready screen', () => {
@@ -106,6 +107,39 @@ describe('OSC 7501 report text fields', () => {
       ])
       const { text: redacted } = redactTranscript(text)
       expect(redacted).toHaveLength(text.length)
+      expect(scanTranscriptForSecrets(redacted)).toEqual([])
+    }
+  )
+
+  // Why parse and not only rescan: a scrubbed report that no longer decodes is discarded on
+  // replay, so the fixture would silently stop exercising the report it was captured for.
+  it.each([
+    [
+      'msg',
+      'reach me at jin.woo@acme.dev about the agent run',
+      'reach me at uuuu@example.com about the agent run',
+      false
+    ],
+    [
+      'title',
+      'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345',
+      `Authorization: ${'X'.repeat(39)}`,
+      false
+    ],
+    ['msg', 'mail: jin.woo@acme.dev', 'mail: uuuu@example.com', true]
+  ])(
+    'scrubs the decoded text of a %s and keeps the report parseable (%#)',
+    (key, decoded, scrubbed, unpadded) => {
+      const withPadding = (value) => (unpadded ? value.replace(/=+$/, '') : value)
+      const prefix = `${ESC}]7501;state=done:${key}=`
+      const text = report(`state=done:${key}=${withPadding(encode(decoded))}`)
+      const { text: redacted } = redactTranscript(text)
+      expect(redacted.startsWith(prefix) && redacted.endsWith(BEL)).toBe(true)
+      expect(redacted.slice(prefix.length, -1)).toBe(withPadding(encode(scrubbed)))
+      expect(parseProgramStatusReport(redacted.slice(`${ESC}]7501;`.length, -1))).toMatchObject({
+        kind: 'report',
+        report: { state: 'done' }
+      })
       expect(scanTranscriptForSecrets(redacted)).toEqual([])
     }
   )

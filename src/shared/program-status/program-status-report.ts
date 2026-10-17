@@ -128,19 +128,23 @@ function hasControlCharacter(text: string): boolean {
   return false
 }
 
-function checkId(value: string): ProgramStatusDiscardReason | null {
+function checkIdLimits(value: string): ProgramStatusDiscardReason | null {
   const segments = value.split('/')
-  if (
-    value.length > MAX_ID_BYTES ||
+  return value.length > MAX_ID_BYTES ||
     segments.length > MAX_ID_LEVELS ||
     segments.some((segment) => segment.length > MAX_ID_SEGMENT_BYTES)
-  ) {
-    return 'pair-limit'
-  }
-  return segments.every((segment) => ID_SEGMENT_PATTERN.test(segment)) ? null : 'id'
+    ? 'pair-limit'
+    : null
 }
 
-/** Per-pair limits, applied to every well-formed occurrence before duplicates resolve. */
+function isIdGrammar(value: string): boolean {
+  return value.split('/').every((segment) => ID_SEGMENT_PATTERN.test(segment))
+}
+
+/**
+ * Per-pair limits, applied to every well-formed occurrence before duplicates resolve. The id
+ * grammar is not a limit: it is checked on the value that wins.
+ */
 function checkPairLimits({ key, value }: Pair): ProgramStatusDiscardReason | null {
   if (key.length > MAX_KEY_BYTES) {
     return 'pair-limit'
@@ -152,7 +156,7 @@ function checkPairLimits({ key, value }: Pair): ProgramStatusDiscardReason | nul
     case 'app':
       return value.length > MAX_APP_BYTES ? 'pair-limit' : null
     case 'id':
-      return checkId(value)
+      return checkIdLimits(value)
     default:
       return null
   }
@@ -197,6 +201,10 @@ export function parseProgramStatusReport(body: string): ProgramStatusParseResult
     resolved.set(pair.key, pair.value)
   }
 
+  const id = resolved.get('id')
+  if (id !== undefined && !isIdGrammar(id)) {
+    return { kind: 'discard', reason: 'id', skippedPairs }
+  }
   const state = resolved.get('state')
   if (!isReportState(state)) {
     return { kind: 'discard', reason: 'state', skippedPairs }
@@ -207,7 +215,7 @@ export function parseProgramStatusReport(body: string): ProgramStatusParseResult
     kind: 'report',
     report: {
       state,
-      id: resolved.get('id') ?? null,
+      id: id ?? null,
       kind: state === 'blocked' && isBlockedKind(kind) ? kind : null,
       app: app !== undefined && APP_PATTERN.test(app) ? app : null,
       progress: readProgress(state, resolved.get('progress'))

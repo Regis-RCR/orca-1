@@ -52,7 +52,7 @@ export function scanTranscriptForSecrets(text) {
     const [first] = scanTranscriptForSecrets(decoded)
     if (first) {
       const at = { index: field.index, match: field.value, ...locate(text, field.index) }
-      findings.push({ kind: `encoded-${first.kind}`, ...at })
+      findings.push({ kind: `${ENCODED_KIND_PREFIX}${first.kind}`, ...at })
     }
   }
   for (const { kind, re } of buildPatterns()) {
@@ -77,6 +77,7 @@ export function scanTranscriptForSecrets(text) {
 // not a token, so its decoded text is what gets scanned; a finding names the encoded span.
 const REPORT_PREFIX = `${String.fromCharCode(0x1b)}]7501;`
 const ENCODED_TEXT_KEYS = new Set(['msg', 'title'])
+const ENCODED_KIND_PREFIX = 'encoded-'
 
 /** @returns {{index: number, value: string}[]} */
 function encodedReportTextFields(text) {
@@ -171,10 +172,24 @@ export function redactTranscript(text) {
   let cursor = 0
   for (const finding of findings) {
     out += text.slice(cursor, finding.index)
-    out += placeholderFor(finding.kind, finding.match.length)
+    out += replacementFor(finding)
     cursor = finding.index + finding.match.length
   }
   return { text: out + text.slice(cursor), redacted: findings.length }
+}
+
+// Why re-encode: a report whose msg or title does not decode is discarded whole on replay, so
+// filling the encoded span would leave a fixture that no longer carries its report. The
+// placeholders are ASCII, so the encoding keeps its length whenever the secret was ASCII.
+function replacementFor(finding) {
+  const decoded = finding.kind.startsWith(ENCODED_KIND_PREFIX)
+    ? decodeBase64Utf8(finding.match)
+    : null
+  if (decoded === null) {
+    return placeholderFor(finding.kind, finding.match.length)
+  }
+  const encoded = Buffer.from(redactTranscript(decoded).text, 'utf8').toString('base64')
+  return finding.match.endsWith('=') ? encoded : encoded.replace(/=+$/, '')
 }
 
 export function formatFindings(label, findings) {
